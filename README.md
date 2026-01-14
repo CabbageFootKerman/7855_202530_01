@@ -8,7 +8,7 @@
 2. Mikhail Rego: I am a curious, apprentice engineer who has a natural talent for organizing things and telling people "they're not doing doing what they're supposed to :yum:." Fun fact: I am crazy into both hard-core rock and hard-core country.
 3. Glen Healy: I'm interested in building some cool electrical and software projects this semester.
 4. Ryan McKay: My favourite animal is the dangerously humble box jellyfish
-
+(injected git conflict)
 
 ## Project Overview
 This system is designed to demonstrate distributed software principles, including:
