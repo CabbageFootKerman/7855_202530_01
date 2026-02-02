@@ -1,6 +1,6 @@
-# Distributed System Project
+# SmartPost WAN Robot Control
 
-**Course:** Software Systems
+**Course:** Software Systems  
 **Status:** In Development
 
 **Team Members:**
@@ -10,7 +10,31 @@
 4. Ryan McKay: My favourite animal is the humble box jellyfish
 
 ## Project Overview
-This system is designed to demonstrate distributed software principles, including:
-- Modular Design
-- Network Communication
-- Security Fundamentals
+
+SmartPost is a smart package delivery box system that allows users to securely receive packages and control their SmartPost unit remotely from anywhere via web or mobile app. The system uses a Raspberry Pi as a central server, exposed to the internet via Tunnelmole, enabling features such as:
+
+- Remote open/close control of the SmartPost box
+- Live video streaming and photo capture
+- Package arrival notifications
+- Review of footage from the last 24 hours
+
+## Folder Structure
+
+```
+code/
+├── src/    # Source code for core modules and services
+├── docs/   # Documentation, design notes, and diagrams
+├── tests/  # Automated and manual test cases
+├── README.md
+└── ...
+```
+
+## Architectural Choices
+
+We use a **Client-Server architecture** with a **Layered (N-Tier) organization**. The Raspberry Pi server acts as the central hub, maintaining the source of truth for permissions and device state, while clients (web, mobile, connected unit) interact via Tunnelmole for secure remote access.
+
+For detailed architectural pattern justification, system diagrams, and trade-offs, see:  
+👉 [Architecture Documentation](docs/architecture/README.md)
+
+---
+This repository is initialized and ready for collaborative development. Please see the `docs/` folder for further details and design documents.
