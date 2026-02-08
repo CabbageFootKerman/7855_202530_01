@@ -1,0 +1,54 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>SmartPost - {{ device_id }}</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
+</head>
+<body>
+  <header class="topbar">
+    <h1>SmartPost</h1>
+    <div>
+      <span class="muted">Device: {{ device_id }}</span>
+      <a class="link" href="{{ url_for('logout') }}">Logout</a>
+    </div>
+  </header>
+
+  <main class="container">
+    <section class="card">
+      <h2>Status</h2>
+      <div class="status-grid">
+        <div><div class="label">Door</div><div id="doorState" class="value">--</div></div>
+        <div><div class="label">Weight</div><div id="weightValue" class="value">--</div></div>
+        <div><div class="label">Last Update</div><div id="lastUpdate" class="value muted">--</div></div>
+      </div>
+
+      <div class="controls">
+        <button id="btnOpen" class="btn btn-primary" type="button">Open</button>
+        <button id="btnClose" class="btn btn-secondary" type="button">Close</button>
+        <span id="cmdResult" class="muted"></span>
+      </div>
+    </section>
+
+    <section class="card">
+      <h2>Cameras</h2>
+      <div class="cam-grid">
+        <img id="cam1" class="cam-img" alt="Cam 1" />
+        <img id="cam2" class="cam-img" alt="Cam 2" />
+        <img id="cam3" class="cam-img" alt="Cam 3" />
+      </div>
+    </section>
+
+    <section class="card">
+      <h2>Debug</h2>
+      <pre id="debugBox" class="pre"></pre>
+    </section>
+  </main>
+
+  <script>
+    window.SMARTPOST_DEVICE_ID = "{{ device_id }}";
+  </script>
+  <script src="{{ url_for('static', filename='device.js') }}"></script>
+</body>
+</html>
