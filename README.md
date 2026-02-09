@@ -1,17 +1,27 @@
-# Distributed System Project
+# Smart Post — Landing Page (UI Entry Point)
 
-**Course:** Software Systems
-**Status:** In Development
+This branch adds a public landing page for the Smart Post Flask app.
 
-**Team Members:**
-1. Pawel Banasik: I don't like defining myself, don't make me do it. I like puzzles and coding, and coming up with innovative solutions to problems, that's about all that I will say.
-2. Mikhail Rego: I am a curious, apprentice engineer who has a natural talent for organizing things and telling people "they're not doing doing what they're supposed to :yum:." Fun fact: I am crazy into both hard-core rock and hard-core country.
-3. Glen Healy: I'm interested in building some cool electrical and software projects this semester.
-4. Ryan McKay: My favourite animal is the dangerously humble box jellyfish
-(injected git conflict)
+## What’s included
 
-## Project Overview
-This system is designed to demonstrate distributed software principles, including:
-- Modular Design
-- Network Communication
-- Security Fundamentals
+### Landing page
+- **Route:** `GET /`
+- **Behavior:** When the user is not logged in, `/` renders `landing.html`.
+- **Landing page contents:**
+  - Large project title
+  - **Login** button (links to `/login`)
+  - **Create account / Sign up** button (links to `/signup`)
+  - Large image/hero area (uses a placeholder image)
+
+> Note: This branch only adds the landing page UI + wiring. Authentication implementation (login/signup behavior, persistence, etc.) is handled elsewhere.
+
+## Files added / changed
+
+- `templates/landing.html`
+- `app.py` (updates `/` route to render `landing.html` when logged out)
+- `static/landing.jpg` (if required by the landing page hero image)
+
+## Expected existing routes (owned by other work)
+The landing page buttons assume these endpoints exist:
+- `/login`
+- `/signup`

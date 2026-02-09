@@ -13,9 +13,14 @@ def get_current_user():
 
 @app.route("/")
 def home():
+    # If not logged in, show landing page with Login + Sign Up buttons
     if not get_current_user():
-        return redirect(url_for("login"))
-    # Send them to a demo device page after login
+        return render_template(
+            "landing.html",
+            project_name="Smart Post"  # change this
+        )
+
+    # If logged in, send them to a demo device page
     return redirect(url_for("device_page", device_id="demo123"))
 
 @app.route("/login", methods=["GET", "POST"])
@@ -32,10 +37,30 @@ def login():
 
     return render_template("login.html", error="Invalid credentials.")
 
+@app.route("/signup", methods=["GET", "POST"])
+def signup():
+    if request.method == "GET":
+        return render_template("signup.html", error=None)
+
+    # Minimal demo signup (in-memory only)
+    username = request.form.get("username", "").strip()
+    password = request.form.get("password", "").strip()
+
+    if not username or not password:
+        return render_template("signup.html", error="Username and password are required.")
+
+    if username in USERS:
+        return render_template("signup.html", error="Username already exists.")
+
+    USERS[username] = password
+    session["username"] = username
+    return redirect(url_for("home"))
+
+
 @app.route("/logout")
 def logout():
     session.clear()
-    return redirect(url_for("login"))
+    return redirect(url_for("home"))
 
 @app.route("/device/<device_id>")
 def device_page(device_id):
