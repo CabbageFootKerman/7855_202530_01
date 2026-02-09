@@ -1,14 +1,14 @@
-# Smart Post — User Persistence (users.json)
+# Smart Post â€” User Persistence (users.json)
 
 This branch builds on the existing landing page branch and adds **user permanence** to the existing login/signup flow by persisting users to a local JSON file.
 
 > Scope note: This branch does **not** change the landing page UI. It only adds persistence for user accounts.
 
-## What’s included
+## Whatâ€™s included
 
 ### User persistence (JSON file)
 - Users are stored in `users.json` in the app root (same folder as `app.py`).
-- Passwords are stored **hashed** (Werkzeug) — no plaintext passwords.
+- Passwords are stored **hashed** (Werkzeug) â€” no plaintext passwords.
 - Supports legacy plaintext entries (if any) by migrating them to hashed format after a successful login.
 
 ### Existing behavior preserved
@@ -36,3 +36,11 @@ Add the following to `.gitignore` in main:
 ```gitignore
 users.json
 *.tmp
+
+## Testing user persistence
+
+1. Run the application:
+2. Create a new user using `/signup`
+3. Stop the server and restart it
+4. Log in with the same user credentials
+5. You will be redirected to the device page, confirming users are loaded from JSON
