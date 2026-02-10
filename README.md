@@ -17,7 +17,6 @@ SmartPost is a smart package delivery box system that allows users to securely r
 - Live video streaming and photo capture
 - Package arrival notifications
 - Review of footage from the last 24 hours
-
 ## Folder Structure
 
 ```
@@ -28,6 +27,10 @@ code/
 ├── README.md
 └── ...
 ```
+
+## 🚀 Start Here: App Location
+
+👉 **[Go to the app source folder (src/)](src/)** — The main application entry point is in [src/app.py](src/app.py).
 
 ## Architectural Choices
 

@@ -6,6 +6,10 @@ __pycache__/
 # Distribution / packaging
 .Python
 
+
+users.json
+*.tmp
+
 # Environments
 .env
 .envrc
