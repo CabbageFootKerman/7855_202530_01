@@ -68,3 +68,12 @@ Add the following to `.gitignore` in main:
 ```gitignore
 users.json
 *.tmp
+
+
+## Testing user persistence
+
+1. Run the application:
+2. Create a new user using `/signup`
+3. Stop the server and restart it
+4. Log in with the same user credentials
+5. You will be redirected to the device page, confirming users are loaded from JSON
