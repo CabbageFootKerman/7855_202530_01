@@ -1,11 +1,13 @@
 # **Code explanations**
 ---
+ 
 
-# Smart Post — Landing Page (UI Entry Point)
+ 
+# Smart Post ï¿½ Landing Pages (UI Entry Point)
 
 This branch adds a public landing page for the Smart Post Flask app.
 
-## What’s included
+## Whatï¿½s included
 
 ### Landing page
 - **Route:** `GET /`
@@ -29,18 +31,49 @@ The landing page buttons assume these endpoints exist:
 - `/login`
 - `/signup`
 
+
+## Device Webpage (`device.html`) â€” Section Explanations
+
+1. **Status Section**
+  - Shows the current state of the device: door status (open/closed), weight (g), and last update time.
+  - Includes â€œOpenâ€ and â€œCloseâ€ buttons to send commands to the device.
+  - Displays command results or errors.
+
+2. **Cameras Section**
+  - Displays three camera feeds (or placeholder images if no feed is available).
+  - Each `<img>` tag is dynamically updated by JavaScript to show the latest image for each camera.
+
+3. **Debug Section**
+  - Shows a live JSON dump of the deviceâ€™s state as received from the backend API.
+  - Useful for developers to see raw data and debug issues.
+
 ---
-# Smart Post — User Persistence (users.json)
+## Flask Server Log â€” What Youâ€™re Seeing
+
+- The log shows the Flask development server starting up, running in debug mode, and listening on http://127.0.0.1:5000.
+- Each line like `"GET /static/placeholder.jpg?... HTTP/1.1" 200 -` is a request from your browser to the server:
+  - `GET /logout`, `GET /login`, `POST /login`, etc.: User navigation and authentication.
+  - `GET /device/demo123`: Loading the device page.
+  - `GET /static/styles.css`, `GET /static/device.js`: Loading static assets (CSS, JS).
+  - `GET /api/device/demo123/state`: The frontend polling the backend for device state (for live updates).
+  - `GET /static/placeholder.jpg?...`: The browser requesting the placeholder image for the camera feeds.
+  - Status codes: `200` (OK), `302` (redirect), `304` (not modified, browser uses cached version).
+
+- The server is working as expected: serving pages, static files, and API responses. The repeated requests for `/api/device/demo123/state` and `/static/placeholder.jpg` are due to the frontend polling for updates and refreshing camera images.
+
+---
+# Smart Post ï¿½ User Persistence (users.json)
 
 This branch builds on the existing landing page branch and adds **user permanence** to the existing login/signup flow by persisting users to a local JSON file.
 
 > Scope note: This branch does **not** change the landing page UI. It only adds persistence for user accounts.
 
-## What’s included
+
+## Whatï¿½s included
 
 ### User persistence (JSON file)
 - Users are stored in `users.json` in the app root (same folder as `app.py`).
-- Passwords are stored **hashed** (Werkzeug) — no plaintext passwords.
+- Passwords are stored **hashed** (Werkzeug) ï¿½ no plaintext passwords.
 - Supports legacy plaintext entries (if any) by migrating them to hashed format after a successful login.
 
 ### Existing behavior preserved
