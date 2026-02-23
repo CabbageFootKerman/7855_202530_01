@@ -1,54 +1,639 @@
 <!doctype html>
 <html lang="en">
 <head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>SmartPost - {{ device_id }}</title>
-  <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>SmartPost - {{ device_id }}</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
+    <style>
+        .hidden {
+            display: none !important;
+        }
+
+        .notif-toolbar {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            gap: 12px;
+            margin: 12px 0;
+            position: relative;
+        }
+
+        .notif-left, .notif-right {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .notif-bell {
+            position: relative;
+            min-width: 44px;
+            min-height: 44px;
+            font-size: 18px;
+            cursor: pointer;
+        }
+
+        .bell-icon {
+            display: inline-block;
+            line-height: 1;
+        }
+
+        .notif-badge {
+            position: absolute;
+            top: -6px;
+            right: -6px;
+            min-width: 18px;
+            height: 18px;
+            border-radius: 999px;
+            padding: 0 5px;
+            font-size: 12px;
+            line-height: 18px;
+            text-align: center;
+            background: #d33;
+            color: white;
+            font-weight: 700;
+        }
+
+        .notif-panel {
+            position: absolute;
+            top: 52px;
+            right: 0;
+            width: min(420px, 92vw);
+            max-height: 70vh;
+            overflow: hidden;
+            border: 1px solid #ccc;
+            border-radius: 10px;
+            background: #fff;
+            box-shadow: 0 8px 24px rgba(0, 0, 0, 0.15);
+            z-index: 1000;
+        }
+
+        .notif-panel-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            gap: 8px;
+            padding: 10px;
+            border-bottom: 1px solid #eee;
+        }
+
+        .notif-panel-actions {
+            display: flex;
+            gap: 6px;
+            flex-wrap: wrap;
+        }
+
+        .notif-status {
+            padding: 8px 10px;
+            font-size: 13px;
+            color: #555;
+            border-bottom: 1px solid #f2f2f2;
+        }
+
+        .notif-list {
+            max-height: 52vh;
+            overflow-y: auto;
+            padding: 6px;
+        }
+
+        .notif-item {
+            border: 1px solid #eee;
+            border-radius: 8px;
+            padding: 10px;
+            margin-bottom: 8px;
+            background: #fafafa;
+        }
+
+            .notif-item.unread {
+                border-left: 4px solid #2b6cb0;
+                background: #f7fbff;
+            }
+
+            .notif-item.read {
+                opacity: 0.9;
+            }
+
+        .notif-item-header {
+            display: flex;
+            justify-content: space-between;
+            gap: 8px;
+            align-items: flex-start;
+        }
+
+        .notif-title {
+            font-weight: 600;
+            margin: 0;
+        }
+
+        .notif-time {
+            font-size: 12px;
+            color: #666;
+            white-space: nowrap;
+        }
+
+        .notif-body {
+            margin: 6px 0 8px;
+            color: #333;
+        }
+
+        .notif-meta {
+            display: flex;
+            gap: 8px;
+            flex-wrap: wrap;
+            font-size: 12px;
+            color: #666;
+            margin-bottom: 8px;
+        }
+
+        .notif-pill {
+            display: inline-block;
+            padding: 2px 8px;
+            border-radius: 999px;
+            border: 1px solid #ddd;
+            background: #fff;
+        }
+
+        .notif-severity-info {
+            border-color: #bcd;
+        }
+
+        .notif-severity-success {
+            border-color: #9fd39f;
+        }
+
+        .notif-severity-warning {
+            border-color: #e0c27a;
+        }
+
+        .notif-severity-error {
+            border-color: #e29a9a;
+        }
+
+        .notif-item-actions {
+            display: flex;
+            gap: 6px;
+        }
+
+        .notif-empty {
+            padding: 12px;
+            text-align: center;
+            color: #666;
+        }
+
+        .notif-demo-row {
+            display: flex;
+            gap: 8px;
+            flex-wrap: wrap;
+            margin: 8px 0 14px;
+        }
+    </style>
+
 </head>
 <body>
-  <header class="topbar">
-    <h1>SmartPost</h1>
-    <div>
-      <span class="muted">Device: {{ device_id }}</span>
-      <a class="link" href="{{ url_for('logout') }}">Logout</a>
+    <header class="topbar">
+        <h1>SmartPost</h1>
+        <div>
+            <span class="muted">Device: {{ device_id }}</span>
+            <a class="link" href="{{ url_for('logout') }}">Logout</a>
+        </div>
+    </header>
+    <!-- Notification Demo Controls -->
+    <div class="notif-toolbar">
+        <div class="notif-left">
+            <button id="checkNotificationsBtn" type="button">Check Notifications</button>
+        </div>
+
+        <div class="notif-right">
+            <button id="notifBellBtn" type="button" class="notif-bell" aria-label="Notifications" aria-expanded="false">
+                <span class="bell-icon">🔔</span>
+                <span id="notifBadge" class="notif-badge hidden">0</span>
+            </button>
+
+            <div id="notifPanel" class="notif-panel hidden" role="dialog" aria-label="Notifications panel">
+                <div class="notif-panel-header">
+                    <strong>Notifications</strong>
+                    <div class="notif-panel-actions">
+                        <button id="refreshNotificationsBtn" type="button">Refresh</button>
+                        <button id="markAllReadBtn" type="button">Mark all read</button>
+                        <button id="clearNotificationsBtn" type="button">Clear read</button>
+                    </div>
+                </div>
+
+                <div id="notifStatus" class="notif-status">Loading...</div>
+
+                <div id="notifList" class="notif-list">
+                    <!-- Notification items render here -->
+                </div>
+            </div>
+        </div>
     </div>
-  </header>
 
-  <main class="container">
-    <section class="card">
-      <h2>Status</h2>
-      <div class="status-grid">
-        <div><div class="label">Door</div><div id="doorState" class="value">--</div></div>
-        <div><div class="label">Weight</div><div id="weightValue" class="value">--</div></div>
-        <div><div class="label">Last Update</div><div id="lastUpdate" class="value muted">--</div></div>
-      </div>
+    <!-- Optional demo buttons (helpful for showing integration quickly) -->
+    <div class="notif-demo-row">
+        <button type="button" class="demo-notify-btn" data-preset="package_detected">
+            Demo: Package Detected
+        </button>
+        <button type="button" class="demo-notify-btn" data-preset="door_left_open">
+            Demo: Door Left Open
+        </button>
+        <button type="button" class="demo-notify-btn" data-preset="device_offline">
+            Demo: Device Offline
+        </button>
+    </div>
 
-      <div class="controls">
-        <button id="btnOpen" class="btn btn-primary" type="button">Open</button>
-        <button id="btnClose" class="btn btn-secondary" type="button">Close</button>
-        <span id="cmdResult" class="muted"></span>
-      </div>
-    </section>
+    <main class="container">
+        <section class="card">
+            <h2>Status</h2>
+            <div class="status-grid">
+                <div><div class="label">Door</div><div id="doorState" class="value">--</div></div>
+                <div><div class="label">Weight</div><div id="weightValue" class="value">--</div></div>
+                <div><div class="label">Last Update</div><div id="lastUpdate" class="value muted">--</div></div>
+            </div>
 
-    <section class="card">
-      <h2>Cameras</h2>
-      <div class="cam-grid">
-        <img id="cam1" class="cam-img" alt="Cam 1" />
-        <img id="cam2" class="cam-img" alt="Cam 2" />
-        <img id="cam3" class="cam-img" alt="Cam 3" />
-      </div>
-    </section>
+            <div class="controls">
+                <button id="btnOpen" class="btn btn-primary" type="button">Open</button>
+                <button id="btnClose" class="btn btn-secondary" type="button">Close</button>
+                <span id="cmdResult" class="muted"></span>
+            </div>
+        </section>
 
-    <section class="card">
-      <h2>Debug</h2>
-      <pre id="debugBox" class="pre"></pre>
-    </section>
-  </main>
+        <section class="card">
+            <h2>Cameras</h2>
+            <div class="cam-grid">
+                <img id="cam1" class="cam-img" alt="Cam 1" />
+                <img id="cam2" class="cam-img" alt="Cam 2" />
+                <img id="cam3" class="cam-img" alt="Cam 3" />
+            </div>
+        </section>
 
-  <script>
+        <section class="card">
+            <h2>Debug</h2>
+            <pre id="debugBox" class="pre"></pre>
+        </section>
+    </main>
+
+    <script>
     window.SMARTPOST_DEVICE_ID = "{{ device_id }}";
-  </script>
-  <script src="{{ url_for('static', filename='device.js') }}"></script>
+    </script>
+    <script src="{{ url_for('static', filename='device.js') }}"></script>
+    <script>
+(() => {
+  // Flask/Jinja device_id from your route: render_template("device.html", device_id=device_id)
+  const DEVICE_ID = "{{ device_id }}";
+
+  // Polling interval (ms)
+  const NOTIF_POLL_MS = 10000;
+
+  // UI elements
+  const checkBtn = document.getElementById("checkNotificationsBtn");
+  const bellBtn = document.getElementById("notifBellBtn");
+  const badgeEl = document.getElementById("notifBadge");
+  const panelEl = document.getElementById("notifPanel");
+  const listEl = document.getElementById("notifList");
+  const statusEl = document.getElementById("notifStatus");
+  const refreshBtn = document.getElementById("refreshNotificationsBtn");
+  const markAllReadBtn = document.getElementById("markAllReadBtn");
+  const clearNotificationsBtn = document.getElementById("clearNotificationsBtn");
+  const demoButtons = document.querySelectorAll(".demo-notify-btn");
+
+  let isPanelOpen = false;
+  let pollHandle = null;
+
+  function setStatus(text) {
+    if (statusEl) statusEl.textContent = text;
+  }
+
+  function escapeHtml(value) {
+    return String(value ?? "")
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;")
+      .replace(/"/g, "&quot;")
+      .replace(/'/g, "&#039;");
+  }
+
+  async function fetchJson(url, options = {}) {
+    const resp = await fetch(url, {
+      credentials: "same-origin",
+      ...options
+    });
+
+    let data = null;
+    try {
+      data = await resp.json();
+    } catch (_) {
+      // leave null if response not JSON
+    }
+
+    if (!resp.ok) {
+      const msg = (data && data.error) ? data.error : `HTTP ${resp.status}`;
+      throw new Error(msg);
+    }
+
+    return data;
+  }
+
+  function getNotifTimestamp(n) {
+    // Prefer Firestore server timestamp if present; fallback to client ISO
+    return n.created_at || n.created_at_client_iso || n.updated_at || null;
+  }
+
+  function formatTime(isoString) {
+    if (!isoString) return "time unavailable";
+    const d = new Date(isoString);
+    if (Number.isNaN(d.getTime())) return isoString;
+    return d.toLocaleString();
+  }
+
+  function severityClass(sev) {
+    const s = (sev || "info").toLowerCase();
+    if (["info", "success", "warning", "error"].includes(s)) return `notif-severity-${s}`;
+    return "notif-severity-info";
+  }
+
+  function renderNotifications(items) {
+    if (!listEl) return;
+
+    if (!items || items.length === 0) {
+      listEl.innerHTML = `<div class="notif-empty">No notifications yet.</div>`;
+      return;
+    }
+
+    listEl.innerHTML = items.map(n => {
+      const isRead = !!n.read;
+      const ts = getNotifTimestamp(n);
+      const title = escapeHtml(n.title || "(Untitled)");
+      const body = escapeHtml(n.body || "");
+      const type = escapeHtml(n.type || "general");
+      const severity = escapeHtml(n.severity || "info");
+      const device = n.device_id ? escapeHtml(n.device_id) : null;
+      const notifId = escapeHtml(n.id || n.event_id || "");
+
+      return `
+        <div class="notif-item ${isRead ? "read" : "unread"}" data-notif-id="${notifId}">
+          <div class="notif-item-header">
+            <p class="notif-title">${title}</p>
+            <span class="notif-time">${escapeHtml(formatTime(ts))}</span>
+          </div>
+
+          <div class="notif-body">${body}</div>
+
+          <div class="notif-meta">
+            <span class="notif-pill ${severityClass(severity)}">${severity}</span>
+            <span class="notif-pill">${type}</span>
+            ${device ? `<span class="notif-pill">device: ${device}</span>` : ""}
+            ${isRead ? `<span class="notif-pill">read</span>` : `<span class="notif-pill">unread</span>`}
+          </div>
+
+          <div class="notif-item-actions">
+            ${isRead ? "" : `<button type="button" class="mark-read-btn" data-notif-id="${notifId}">Mark read</button>`}
+          </div>
+        </div>
+      `;
+    }).join("");
+  }
+
+  function setBadgeCount(count) {
+    const n = Number.isFinite(count) ? count : 0;
+    if (!badgeEl) return;
+
+    if (n <= 0) {
+      badgeEl.textContent = "0";
+      badgeEl.classList.add("hidden");
+      return;
+    }
+
+    badgeEl.textContent = String(n > 99 ? "99+" : n);
+    badgeEl.classList.remove("hidden");
+  }
+
+  async function loadUnreadCount() {
+    try {
+      const data = await fetchJson("/api/notifications/unread-count");
+      setBadgeCount(data.unread_count || 0);
+      return data;
+    } catch (err) {
+      console.error("Unread count failed:", err);
+      setStatus(`Unread count failed: ${err.message}`);
+      return null;
+    }
+  }
+
+  async function loadNotifications({ unreadOnly = false } = {}) {
+    setStatus("Loading notifications...");
+    try {
+      const params = new URLSearchParams();
+      params.set("limit", "20");
+      if (unreadOnly) params.set("unread_only", "true");
+
+      const data = await fetchJson(`/api/notifications?${params.toString()}`);
+      const items = Array.isArray(data.items) ? data.items : [];
+      renderNotifications(items);
+      setStatus(`Showing ${items.length} notification${items.length === 1 ? "" : "s"}.`);
+      return data;
+    } catch (err) {
+      console.error("Notification list failed:", err);
+      setStatus(`Load failed: ${err.message}`);
+      renderNotifications([]);
+      return null;
+    }
+  }
+
+  async function refreshAll({ openPanel = false } = {}) {
+    await loadUnreadCount();
+    if (openPanel || isPanelOpen) {
+      await loadNotifications();
+    }
+  }
+
+  function openPanel() {
+    if (!panelEl) return;
+    isPanelOpen = true;
+    panelEl.classList.remove("hidden");
+    if (bellBtn) bellBtn.setAttribute("aria-expanded", "true");
+  }
+
+  function closePanel() {
+    if (!panelEl) return;
+    isPanelOpen = false;
+    panelEl.classList.add("hidden");
+    if (bellBtn) bellBtn.setAttribute("aria-expanded", "false");
+  }
+
+  function togglePanel() {
+    if (isPanelOpen) closePanel();
+    else openPanel();
+  }
+
+  async function markNotificationRead(notificationId) {
+    if (!notificationId) return;
+    try {
+      await fetchJson(`/api/notifications/${encodeURIComponent(notificationId)}/read`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" }
+      });
+      await refreshAll({ openPanel: true });
+    } catch (err) {
+      console.error("Mark read failed:", err);
+      setStatus(`Mark read failed: ${err.message}`);
+    }
+  }
+
+  async function markAllRead() {
+    try {
+      setStatus("Marking all as read...");
+      await fetchJson("/api/notifications/read-all", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" }
+      });
+      await refreshAll({ openPanel: true });
+      setStatus("All notifications marked as read.");
+    } catch (err) {
+      console.error("Mark all read failed:", err);
+      setStatus(`Mark all read failed: ${err.message}`);
+    }
+  }
+
+    async function clearNotifications(mode = "read") {
+        try {
+            const label = mode === "all" ? "all notifications" : "read notifications";
+            setStatus(`Clearing ${label}...`);
+
+            await fetchJson("/api/notifications/clear", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ mode })
+            });
+
+            await refreshAll({ openPanel: true });
+            setStatus(`Cleared ${label}.`);
+        } catch (err) {
+            console.error("Clear notifications failed:", err);
+            setStatus(`Clear failed: ${err.message}`);
+        }
+    }
+
+  async function triggerDemoNotification(preset) {
+    try {
+      setStatus(`Generating demo notification: ${preset}...`);
+      await fetchJson(`/api/device/${encodeURIComponent(DEVICE_ID)}/demo-notify`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ preset })
+      });
+      await refreshAll({ openPanel: true });
+      setStatus(`Demo notification generated: ${preset}`);
+    } catch (err) {
+      console.error("Demo notification failed:", err);
+      setStatus(`Demo failed: ${err.message}`);
+    }
+  }
+
+  function startPolling() {
+    if (pollHandle) return;
+    pollHandle = setInterval(() => {
+      // Only poll when page is visible to reduce noise
+      if (document.visibilityState === "visible") {
+        refreshAll({ openPanel: false });
+      }
+    }, NOTIF_POLL_MS);
+  }
+
+  function stopPolling() {
+    if (!pollHandle) return;
+    clearInterval(pollHandle);
+    pollHandle = null;
+  }
+
+  // Event bindings
+  if (checkBtn) {
+    checkBtn.addEventListener("click", async () => {
+      // "Check Notifications" opens panel + refreshes count/list
+      openPanel();
+      await refreshAll({ openPanel: true });
+    });
+  }
+
+  if (bellBtn) {
+    bellBtn.addEventListener("click", async (e) => {
+      e.stopPropagation();
+      togglePanel();
+      if (isPanelOpen) {
+        await refreshAll({ openPanel: true });
+      }
+    });
+
+    document.addEventListener("keydown", (e) => {
+        if (e.key === "Escape" && isPanelOpen) {
+            closePanel();
+        }
+    });
+  }
+
+  if (refreshBtn) {
+    refreshBtn.addEventListener("click", () => refreshAll({ openPanel: true }));
+  }
+
+  if (markAllReadBtn) {
+    markAllReadBtn.addEventListener("click", markAllRead);
+  }
+
+    if (clearNotificationsBtn) {
+        clearNotificationsBtn.addEventListener("click", async () => {
+            const ok = window.confirm("Clear all read notifications?");
+            if (!ok) return;
+            await clearNotifications("read");
+        });
+    }
+
+  if (listEl) {
+    listEl.addEventListener("click", (e) => {
+      const btn = e.target.closest(".mark-read-btn");
+      if (!btn) return;
+      const notifId = btn.getAttribute("data-notif-id");
+      markNotificationRead(notifId);
+    });
+  }
+
+  // Demo buttons (optional but useful for showcasing)
+  demoButtons.forEach(btn => {
+    btn.addEventListener("click", () => {
+      const preset = btn.getAttribute("data-preset");
+      triggerDemoNotification(preset);
+    });
+  });
+
+  // Close panel when clicking outside
+  document.addEventListener("click", (e) => {
+    if (!isPanelOpen) return;
+    const clickedInsidePanel = panelEl && panelEl.contains(e.target);
+    const clickedBell = bellBtn && bellBtn.contains(e.target);
+    if (!clickedInsidePanel && !clickedBell) {
+      closePanel();
+    }
+  });
+
+  // Refresh when tab becomes visible again
+  document.addEventListener("visibilitychange", () => {
+    if (document.visibilityState === "visible") {
+      refreshAll({ openPanel: isPanelOpen });
+    }
+  });
+
+  // Initial load
+  refreshAll({ openPanel: false });
+  startPolling();
+
+  // Expose a tiny debug handle if you want to test from devtools:
+  window.smartPostNotifications = {
+    refreshAll,
+    openPanel,
+    closePanel,
+    triggerDemoNotification,
+    stopPolling,
+    startPolling
+  };
+})();
+    </script>
 </body>
 </html>

@@ -1,112 +1,179 @@
-# **Code explanations**
----
- 
+# SmartPost Notification System Scaffold (Web Demo + Future Mobile-Oriented)
 
- 
-# Smart Post � Landing Pages (UI Entry Point)
+## Overview
 
-This branch adds a public landing page for the Smart Post Flask app.
+This change adds a **notification system scaffold** to the SmartPost Flask app.
 
-## What�s included
+The goal of this work is to provide a **clean, extensible notification structure** that:
+- works immediately in the current web app,
+- demonstrates integration with the existing device workflow,
+- stores notifications persistently in Firestore,
+- leaves clear extension points for teammates to implement:
+  - web push notifications,
+  - mobile push notifications,
+  - recipient routing (device owners/shared users),
+  - preferences, retries, and background delivery.
 
-### Landing page
-- **Route:** `GET /`
-- **Behavior:** When the user is not logged in, `/` renders `landing.html`.
-- **Landing page contents:**
-  - Large project title
-  - **Login** button (links to `/login`)
-  - **Create account / Sign up** button (links to `/signup`)
-  - Large image/hero area (uses a placeholder image)
-
-> Note: This branch only adds the landing page UI + wiring. Authentication implementation (login/signup behavior, persistence, etc.) is handled elsewhere.
-
-## Files added / changed
-
-- `templates/landing.html`
-- `app.py` (updates `/` route to render `landing.html` when logged out)
-- `static/landing.jpg` (if required by the landing page hero image)
-
-## Expected existing routes (owned by other work)
-The landing page buttons assume these endpoints exist:
-- `/login`
-- `/signup`
-
-
-## Device Webpage (`device.html`) — Section Explanations
-
-1. **Status Section**
-  - Shows the current state of the device: door status (open/closed), weight (g), and last update time.
-  - Includes “Open” and “Close” buttons to send commands to the device.
-  - Displays command results or errors.
-
-2. **Cameras Section**
-  - Displays three camera feeds (or placeholder images if no feed is available).
-  - Each `<img>` tag is dynamically updated by JavaScript to show the latest image for each camera.
-
-3. **Debug Section**
-  - Shows a live JSON dump of the device’s state as received from the backend API.
-  - Useful for developers to see raw data and debug issues.
+This is **not** a production-complete notification platform yet. It is a working scaffold with a live demo UI and testable API flow.
 
 ---
-## Flask Server Log — What You’re Seeing
 
-- The log shows the Flask development server starting up, running in debug mode, and listening on http://127.0.0.1:5000.
-- Each line like `"GET /static/placeholder.jpg?... HTTP/1.1" 200 -` is a request from your browser to the server:
-  - `GET /logout`, `GET /login`, `POST /login`, etc.: User navigation and authentication.
-  - `GET /device/demo123`: Loading the device page.
-  - `GET /static/styles.css`, `GET /static/device.js`: Loading static assets (CSS, JS).
-  - `GET /api/device/demo123/state`: The frontend polling the backend for device state (for live updates).
-  - `GET /static/placeholder.jpg?...`: The browser requesting the placeholder image for the camera feeds.
-  - Status codes: `200` (OK), `302` (redirect), `304` (not modified, browser uses cached version).
+## Scope of This Change
 
-- The server is working as expected: serving pages, static files, and API responses. The repeated requests for `/api/device/demo123/state` and `/static/placeholder.jpg` are due to the frontend polling for updates and refreshing camera images.
+### Backend (`app.py`)
+Added:
+- Notification orchestration service (`NotificationService`)
+- Channel interface (`NotificationChannel`)
+- Firestore-backed channels:
+  - global event log channel
+  - per-user inbox channel
+- Stub channels for future delivery:
+  - web push stub
+  - mobile push stub
+- Notification publishing helper for device events
+- Demo recipient resolver (current user only)
+- Notification API routes:
+  - list notifications
+  - unread count
+  - mark one as read
+  - mark all as read
+- Demo notification endpoint (`/api/device/<device_id>/demo-notify`)
+- Integration into existing device command route (`/api/device/<device_id>/command`) so command actions generate notifications
+
+### Frontend (`templates/device.html`)
+Added:
+- Notification bell UI with unread badge
+- Notification panel/dropdown
+- “Check Notifications” button
+- Demo notification buttons
+- Polling (10s) for unread count and list refresh
+- Mark-read + mark-all-read actions
+- Status messaging in the notification panel
 
 ---
-# Smart Post � User Persistence (users.json)
 
-This branch builds on the existing landing page branch and adds **user permanence** to the existing login/signup flow by persisting users to a local JSON file.
+## Architecture Summary
 
-> Scope note: This branch does **not** change the landing page UI. It only adds persistence for user accounts.
+The notification system is intentionally split into layers:
 
+1. **Event generation**  
+   A route or subsystem emits a notification event (example: device command sent, package detected).
 
-## What�s included
+2. **Notification orchestration**  
+   `NotificationService.publish(...)` creates a standard payload and fans out to registered channels.
 
-### User persistence (JSON file)
-- Users are stored in `users.json` in the app root (same folder as `app.py`).
-- Passwords are stored **hashed** (Werkzeug) � no plaintext passwords.
-- Supports legacy plaintext entries (if any) by migrating them to hashed format after a successful login.
+3. **Channel delivery**  
+   Current channels:
+   - Firestore global event log (debug/audit/demo)
+   - Firestore per-user inbox (in-app notifications)
 
-### Existing behavior preserved
-- `GET|POST /login` continues to authenticate and set `session["username"]`.
-- `GET|POST /signup` continues to create users and log them in.
-- Landing page behavior remains the same as the parent branch:
-  - Logged out: `/` renders `landing.html`
-  - Logged in: `/` redirects to `/device/demo123`
+   Placeholder channels:
+   - Web push (stub)
+   - Mobile push (stub)
 
-## Files changed
+This design allows teammates to add new delivery methods later without changing route logic.
 
-- `app.py`
-  - Adds `users.json` load/save helpers
-  - Updates `/login` to verify hashed passwords
-  - Updates `/signup` to save new users to `users.json`
+---
 
-## Runtime-generated files (do NOT commit)
+## Firestore Data Structure (Current Scaffold)
 
-This feature generates a user data file at runtime:
-- `users.json`
-- `users.tmp` (temporary file used during safe-save)
+### Global notification event log
+Collection:
+- `notification_events/{event_id}`
 
-Add the following to `.gitignore` in main:
+Purpose:
+- records all generated events for debugging/demo/auditing
 
-```gitignore
-users.json
-*.tmp
+### Per-user notification inbox
+Collection:
+- `users/{username}/notifications/{event_id}`
 
+Purpose:
+- stores in-app notifications shown in the notification panel
+- supports read/unread state
 
-## Testing user persistence
+---
 
-1. Run the application:
-2. Create a new user using `/signup`
-3. Stop the server and restart it
-4. Log in with the same user credentials
-5. You will be redirected to the device page, confirming users are loaded from JSON
+## Notification Payload Shape (Current Scaffold)
+
+Typical fields written into user notification docs include:
+
+- `schema_version`
+- `event_id`
+- `type`
+- `title`
+- `body`
+- `severity` (`info`, `success`, `warning`, `error`)
+- `actor_username`
+- `device_id`
+- `data` (extensible metadata)
+- `created_at_client_iso`
+- `created_at` (Firestore server timestamp)
+- `updated_at` (Firestore server timestamp)
+- `read` / `read_at`
+- `delivery` (status placeholders for in-app / web_push / mobile_push)
+
+---
+
+## Current Behavior (Important)
+
+### Recipient resolution (temporary/demo behavior)
+Notifications are currently sent to the **logged-in user only**.
+
+This is intentional and isolated in:
+- `resolve_notification_recipients_for_device(...)`
+
+Teammates can later replace this with:
+- device ownership lookup
+- shared users
+- role-based routing
+- notification preferences / mute rules
+
+---
+
+## API Endpoints Added / Updated
+
+## Existing route now integrated with notifications
+### `POST /api/device/<device_id>/command`
+- Existing command route (`open` / `close`)
+- Now also generates a notification (`device_command`) on success
+
+---
+
+## New notification APIs
+
+### `GET /api/notifications`
+Returns recent notifications for the logged-in user.
+
+Query params:
+- `limit` (default `20`, clamped to `1..100`)
+- `unread_only` (`true/false`)
+
+---
+
+### `GET /api/notifications/unread-count`
+Returns unread notification count for the logged-in user.
+
+---
+
+### `POST /api/notifications/<notification_id>/read`
+Marks a single notification as read.
+
+---
+
+### `POST /api/notifications/read-all`
+Marks all unread notifications as read for the logged-in user.
+
+---
+
+### `POST /api/device/<device_id>/demo-notify`
+Creates demo notifications without real hardware events.
+
+Supported presets:
+- `package_detected`
+- `door_left_open`
+- `device_offline`
+
+Request JSON example:
+```json
+{"preset": "package_detected"}
