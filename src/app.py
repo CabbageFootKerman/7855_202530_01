@@ -740,6 +740,13 @@ def api_device_demo_notify(device_id):
             "severity": "error",
             "data": {"source": "demo", "event": "device_offline"},
         },
+        "video_recorded": {
+            "notif_type": "video_recorded",
+            "title": "Video recorded",
+            "body": f"Device {device_id} recorded a new video clip.",
+            "severity": "info",
+            "data": {"source": "demo", "event": "video_recorded"},
+        },
     }
 
     if preset not in presets:
