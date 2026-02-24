@@ -270,6 +270,22 @@
         </section>
 
         <section class="card">
+          <h2>Images (Upload / Download)</h2>
+
+          <form id="imageUploadForm">
+            <input id="imageFile" type="file" accept="image/*" required />
+            <button type="submit" class="btn btn-primary">Upload Image</button>
+            <span id="imageUploadStatus" class="muted"></span>
+          </form>
+
+          <div style="margin-top: 12px;">
+            <button id="refreshImagesBtn" type="button">Refresh Available Images</button>
+          </div>
+
+          <ul id="imageList" style="margin-top: 10px;"></ul>
+        </section>
+
+        <section class="card">
             <h2>Debug</h2>
             <pre id="debugBox" class="pre"></pre>
         </section>
@@ -637,6 +653,92 @@
     startPolling
   };
 })();
+    </script>
+    <script>
+    (() => {
+      const DEVICE_ID = window.SMARTPOST_DEVICE_ID || "{{ device_id }}";
+
+      const form = document.getElementById("imageUploadForm");
+      const fileInput = document.getElementById("imageFile");
+      const statusEl = document.getElementById("imageUploadStatus");
+      const refreshBtn = document.getElementById("refreshImagesBtn");
+      const listEl = document.getElementById("imageList");
+
+      function setStatus(msg) {
+        if (statusEl) statusEl.textContent = msg || "";
+      }
+
+      async function fetchJson(url, options = {}) {
+        const resp = await fetch(url, { credentials: "same-origin", ...options });
+        let data = null;
+        try { data = await resp.json(); } catch (_) {}
+        if (!resp.ok) {
+          const msg = (data && data.error) ? data.error : `HTTP ${resp.status}`;
+          throw new Error(msg);
+        }
+        return data;
+      }
+
+      function renderList(items) {
+        if (!listEl) return;
+        if (!items || items.length === 0) {
+          listEl.innerHTML = "<li class='muted'>No images available (or all expired).</li>";
+          return;
+        }
+
+        listEl.innerHTML = items.map(it => {
+          const id = it.id;
+          const name = it.original_filename || it.stored_filename || id;
+          const size = it.size_bytes ? ` (${it.size_bytes} bytes)` : "";
+          const dl = `/api/media/${encodeURIComponent(id)}/download`;
+          return `<li><a href="${dl}">${name}</a>${size}</li>`;
+        }).join("");
+      }
+
+      async function refreshList() {
+        try {
+          setStatus("Loading list...");
+          const data = await fetchJson(`/api/media?device_id=${encodeURIComponent(DEVICE_ID)}`);
+          renderList(data.items || []);
+          setStatus(`Found ${data.count || 0} image(s).`);
+        } catch (e) {
+          setStatus(`List failed: ${e.message}`);
+          renderList([]);
+        }
+      }
+
+      if (form) {
+        form.addEventListener("submit", async (e) => {
+          e.preventDefault();
+          const f = fileInput && fileInput.files && fileInput.files[0];
+          if (!f) {
+            setStatus("Pick an image first.");
+            return;
+          }
+
+          const fd = new FormData();
+          fd.append("image", f);
+
+          try {
+            setStatus("Uploading...");
+            await fetchJson(`/api/device/${encodeURIComponent(DEVICE_ID)}/upload-image`, {
+              method: "POST",
+              body: fd
+            });
+            setStatus("Uploaded.");
+            fileInput.value = "";
+            await refreshList();
+          } catch (err) {
+            setStatus(`Upload failed: ${err.message}`);
+          }
+        });
+      }
+
+      if (refreshBtn) refreshBtn.addEventListener("click", refreshList);
+
+      // Initial load
+      refreshList();
+    })();
     </script>
 </body>
 </html>

@@ -176,4 +176,113 @@ Supported presets:
 
 Request JSON example:
 ```json
+
 {"preset": "package_detected"}
+
+```
+---
+
+## Image Upload & Retrieval (Firestore-Tracked, Local Storage)
+
+### Overview
+This change adds **image upload and retrieval support** to the SmartPost Flask application.
+
+The goal is to demonstrate:
+- transferring image data from a device-facing client to the server,
+- persisting **meaningful metadata in Firestore**,
+- listing available images per device,
+- and allowing authenticated users to download images.
+
+Images are stored **locally on the Flask server**, while Firestore is used as the authoritative index and metadata store.
+
+This design avoids committing binary media to the repository while still demonstrating persistent backend tracking.
+
+---
+
+### Backend Behavior
+When an image is uploaded:
+
+1. The file is saved locally under: src/uploads/device_<device_id>/<uuid>.<ext>
+2. A Firestore document is created in: media_uploads/{upload_id}
+
+Each document records metadata including:
+- `device_id`
+- original filename
+- stored filename
+- relative file path
+- MIME type
+- file size
+- upload timestamp
+- expiration timestamp (TTL)
+
+3. A notification event is generated confirming the upload.
+
+Image metadata is later queried to:
+- list available images for a given device,
+- validate expiration,
+- and locate the file for download.
+
+---
+
+### API Endpoints Added
+
+#### Upload image (device → server)
+
+POST /api/device/<device_id>/upload-image
+- Accepts multipart form data with field name `image`
+- Stores the image locally
+- Writes metadata to Firestore
+- Returns an upload ID on success
+
+---
+
+#### List available images (user → server)
+GET /api/media?device_id=<device_id>
+
+- Queries Firestore for images associated with the device
+- Filters out expired entries
+- Returns metadata for available downloads
+
+---
+
+#### Download image
+GET /api/media/<upload_id>/download
+
+- Validates metadata and expiration
+- Serves the file from local storage
+- Forces download with the original filename
+
+---
+
+### Firestore Index Requirement (Important)
+The image listing query filters by `device_id` and orders by creation time.  
+Firestore requires a **composite index** for this query shape.
+
+On first run, Firestore may return: The query requires an index
+
+When this occurs:
+- Follow the link provided in the error message
+- Create the suggested index (one-time, per Firebase project)
+
+Once created, no further action is required for that project.
+
+---
+
+### Local Setup Notes (Firestore Credentials)
+This project does **not** commit Firebase credentials.
+
+To run locally:
+- Place `serviceAccountKey.json` at the repository root  
+  **or**
+- Set the environment variable: FIREBASE_KEY_PATH=<path to serviceAccountKey.json>
+
+Each developer may use their own Firebase project during local development.  
+Firestore indexes are created **once per project**, not per user or per run.
+
+---
+
+### Scope Notes
+- Images are stored locally for demo purposes.
+- Firestore acts as the persistent metadata/index layer.
+- This is sufficient to demonstrate file transfer, persistence, and retrieval for the sprint.
+- Video support can be added later using the same pattern.
