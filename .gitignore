@@ -35,4 +35,7 @@ venv.bak/
 #  and can be added to the global gitignore or merged into this file.
 .idea/
 
+# Uploaded media (local only)
+src/uploads/*
+!src/uploads/.gitkeep
 
