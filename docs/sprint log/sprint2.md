@@ -1,11 +1,12 @@
 # Sprint 2 Report
 
-**Format:** Add the markdown (`docs/sprint2-report.md`) to your repo and submit the PDF to Learning Hub  
-**Purpose:** This report is a **written companion** to your live demo. It summarizes **what you planned**, **what you delivered**, and **what you learned**.
+This document summarizes our team's progress, deliverables, and lessons learned during Sprint 2 for the SmartPost project.
 
 ---
 
 ## 1. Sprint Overview
+
+This section provides the team name, sprint dates, and the main goal for Sprint 2.
 
 - **Your Team Name:** SmartPost Team  
 - **Sprint 2 Dates:** Tuesday 3 weeks ago until today  
@@ -15,6 +16,8 @@
 
 ## 2. Sprint Board
 
+This section lists our team's project management resources and visualizes task ownership and progress for Sprint 2.
+
 **Sprint Board Link:** https://trello.com/b/yflbxHFP/comp7855202610-team1  
 **GitHub Repository Link:** https://github.com/CabbageFootKerman/7855_202530_01
 
@@ -22,14 +25,14 @@
 
 ### 2.1 Sprint Board Screenshot (Filtered by Team Member)
 
-**Please provide a screenshot of your Sprint 2 board** (e.g., Trello, GitHub Projects) **filtered by each team member**. This makes the review concrete and shows shared ownership.
+Sprint board screenshots below show each member's contributions and completed tasks for Sprint 2.
 
 - CodeNube737 (Mikhail R)
 - CabbageFootKerman (Pawel B)
 - Raevz (Ryan M)
-- HealyElectrical (Glen Healy) 
-- **Members Board Screenshot:**  
-  `images/sprint2.jpeg`
+- HealyElectrical (Glen Healy)
+- **Members Board Screenshot:**
+  ![Sprint 2 Board](images/sprint2.jpeg)
 
 ---
 
@@ -52,18 +55,20 @@ Based on what you **plan** vs. what you **demoed**, summarize the state of your 
 
 ---
 
-## 3. Technical Summary: What Was Implemented
+## 3. Technical Summary: Implementation Details
 
-This is a **short technical summary** of the **end-to-end feature** you built.
+This section describes the main technical deliverables for Sprint 2, focusing on Firestore cloud storage, REST API protocol, and the notification system scaffold for SmartPost.
 
 - **Feature:** Firestore cloud storage & Notification System Scaffold (SmartPost)
 - **Collection:** `notification_events` (global event log), `users/{username}/notifications` (per-user inbox)
-- **What it does:** Adds a notification system to the SmartPost app, allowing device events and commands to generate notifications that are stored in Firestore and displayed in the web UI. The system supports per-user inboxes, read/unread state, and is designed for future extension to web/mobile push delivery. The main updates in Sprint 2 were to Firestore storage and the REST API protocol, enabling persistent notification data and standardized client-server communication.
+- **What it does:** Enables persistent storage of device events and notifications in Firestore, with a RESTful API for client-server communication. The notification system (developed by Ryan) supports per-user inboxes, read/unread state, and is designed for future extension to web/mobile push delivery. The main updates in Sprint 2 were to Firestore storage and the REST API protocol, enabling reliable notification delivery and standardized data exchange.
+- **Image Uploads:** Server protocols were added (by Pawel) to allow uploading images to a local, GITIGNOREd 'uploads' folder. This scaffolding prepares for future SmartPost image capture uploads.
+- **Networking:** Glen integrated external Cloudflare networking, enabling remote connection to our server app. This makes authentication a top priority for the next sprint.
 
 ### Data Model (Firestore)
 
-- **Document shape:**  
-  Example JSON that represents **one document** in the collection:
+- **Document shape:**
+  Example JSON representing a notification document:
 
   ```json
   {
@@ -81,7 +86,7 @@ This is a **short technical summary** of the **end-to-end feature** you built.
 
   ![Firestore Document Example](images/firestore_sprint2.jpeg)
 
-  **Why this structure?** We use `userId` to enforce per-user ownership, `id` for unique identification, and `createdAt` for reliable ordering and audit history. The `status` and `name` fields allow flexible notification content and tracking. This schema supports scalable, secure, and user-specific notification delivery.
+  **Why this structure?** This schema enforces per-user ownership, unique identification, and reliable ordering. It supports scalable, secure, and user-specific notification delivery for SmartPost.
 
 - **Input (Client → Server):**  
   Example JSON the client sends (e.g., POST to `/api/device/demo123/command`):
@@ -114,21 +119,21 @@ This is a **short technical summary** of the **end-to-end feature** you built.
 
 ---
 
-## 4. End-to-End Flow (What Was Demoed)
+## 4. End-to-End Flow
 
-The demo showcased the full notification and device command flow:
+This section outlines the complete workflow for device commands and notifications in SmartPost, from client request to Firestore storage and client retrieval. The notification system was developed by Ryan, image upload scaffolding by Pawel, and Glen enabled remote server access via Cloudflare networking. As a result, adding authentication is a critical next step for security.
 
-1. **Client** sends a POST request to the server (e.g., `/api/device/demo123/command`) with a valid JSON payload (such as `{ "command": "open" }`).
-2. **Server** validates the input and requires authentication (user must be logged in; session-based in Flask).
-3. **Server** processes the command and publishes a notification using the NotificationService, which writes to Firestore collections (`notification_events` and `users/{username}/notifications`).
-4. **Server** responds to the client with a success message and notification delivery details.
-5. **Client** can request notifications (e.g., GET `/api/notifications`) and the server reads the user's notification documents from Firestore.
-6. **Server** returns the notification data to the client, supporting unread filtering and pagination.
+1. The client sends a device command to the server via a REST API endpoint.
+2. The server authenticates the user, validates the request, and processes the command.
+3. A notification is generated and stored in Firestore, both in a global event log and in the user's inbox.
+4. The server responds to the client with confirmation and notification delivery details.
+5. Clients can retrieve notifications using API endpoints, with support for unread filtering and pagination.
+6. The server supports image uploads to a local, GITIGNOREd 'uploads' folder, preparing for future SmartPost image capture features.
+7. Remote server access is enabled via Cloudflare networking, making authentication a top priority for the next sprint.
 
 **Bounded Read:**
 
-- **What you did:** Used Firestore `.limit()` and `.order_by()` in notification and media queries to fetch a maximum number of items per request (e.g., limit 20 or 50, newest first).
-- **Why this matters:** This prevents unbounded scans, controls cost, and ensures fast performance as data grows, while supporting efficient pagination and filtering for the client UI.
+Firestore queries use `.limit()` and `.order_by()` to efficiently fetch a set number of items per request, ensuring scalable performance and cost control as data grows.
 
 ---
 
