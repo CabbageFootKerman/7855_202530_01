@@ -18,14 +18,24 @@ SmartPost is a smart package delivery box system that allows users to securely r
 - Package arrival notifications
 - Review of footage from the last 24 hours
 ## Folder Structure
-
 ```
-code/
-├── src/    # Source code for core modules and services
-├── docs/   # Documentation, design notes, and diagrams
-├── tests/  # Automated and manual test cases
-├── README.md
-└── ...
+├── app.py
+├── config.py
+├── firebase.py
+├── requirements.txt
+├── serviceAccountKey.json
+├── .env
+├── blueprints/
+│   ├── auth/
+│   ├── profile/
+│   ├── device/
+│   ├── media/
+│   ├── notifications/
+│   ├── dashboard/
+│   └── api/
+├── decorators/
+├── utils/
+└── templates/
 ```
 
 ## 🚀 Start Here: App Location
