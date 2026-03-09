@@ -98,7 +98,42 @@
 ├── utils/
 └── templates/
 ```
-
+src/
+├── config.py 
+├── firebase.py
+├── blueprints/
+│   ├── __init__.py
+│   ├── auth/
+│   │   ├── __init__.py
+│   │   └── routes.py
+│   ├── profile/
+│   │   ├── __init__.py
+│   │   └── routes.py
+│   ├── device/
+│   │   ├── __init__.py
+│   │   └── routes.py
+│   ├── media/
+│   │   ├── __init__.py
+│   │   └── routes.py
+│   ├── notifications/
+│   │   ├── __init__.py
+│   │   └── routes.py
+│   ├── dashboard/
+│   │   ├── __init__.py
+│   │   └── routes.py
+│   └── api/
+│       ├── __init__.py
+│       └── routes.py
+├── decorators/
+│   ├── __init__.py
+│   └── auth.py
+└── utils/
+    ├── __init__.py
+    ├── auth.py
+    ├── profile.py
+    ├── validation.py
+    ├── notifications.py
+    └── firestore.py
 ---
 
 ## Final Advice

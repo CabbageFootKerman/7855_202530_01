@@ -1,0 +1,1 @@
+# Profile blueprint routes (CRUD)

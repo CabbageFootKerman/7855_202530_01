@@ -13,30 +13,30 @@ from typing import Any, Dict, List, Optional
 
 
 app = Flask(__name__)
-app.secret_key = os.getenv("FLASK_SECRET_KEY", "dev-secret-key")
+app.secret_key = os.getenv("FLASK_SECRET_KEY", "dev-secret-key") ###
 
 # --- Firestore setup ---
 BASE_DIR = Path(__file__).resolve().parents[1]  # goes from /src/app.py up to project root
-KEY_PATH = os.getenv("FIREBASE_KEY_PATH", str(BASE_DIR / "serviceAccountKey.json"))
+KEY_PATH = os.getenv("FIREBASE_KEY_PATH", str(BASE_DIR / "serviceAccountKey.json")) ###
 
-if not Path(KEY_PATH).exists():
-    raise FileNotFoundError(f"Firestore key not found at: {KEY_PATH}")
+if not Path(KEY_PATH).exists(): ###
+    raise FileNotFoundError(f"Firestore key not found at: {KEY_PATH}") ###
 
-cred = credentials.Certificate(KEY_PATH)
+cred = credentials.Certificate(KEY_PATH) ###
 
-# Avoid "already initialized" errors when Flask auto-reloads
-if not firebase_admin._apps:
-    firebase_admin.initialize_app(cred)
+# Avoid "already initialized" errors when Flask auto-reloads ###
+if not firebase_admin._apps: ###
+    firebase_admin.initialize_app(cred) ###
 
-db = firestore.client()
+db = firestore.client() ###
 # --- end Firestore setup ---
 
 # --- Uploads (local disk) ---
-UPLOAD_ROOT = BASE_DIR / "src" / "uploads"
+UPLOAD_ROOT = BASE_DIR / "src" / "uploads" ###
 UPLOAD_ROOT.mkdir(parents=True, exist_ok=True)
 
-ALLOWED_IMAGE_EXTS = {".jpg", ".jpeg", ".png", ".gif", ".webp"}
-MEDIA_TTL_SECONDS = 180  # 3 minutes
+ALLOWED_IMAGE_EXTS = {".jpg", ".jpeg", ".png", ".gif", ".webp"} ###
+MEDIA_TTL_SECONDS = 180  # 3 minutes ###
 # --- end uploads ---
 
 
@@ -44,7 +44,7 @@ MEDIA_TTL_SECONDS = 180  # 3 minutes
 # Notification scaffold (extensible)
 # ---------------------------
 
-NOTIFICATION_SCHEMA_VERSION = 1
+NOTIFICATION_SCHEMA_VERSION = 1 ###
 
 
 def _utc_now_iso() -> str:
