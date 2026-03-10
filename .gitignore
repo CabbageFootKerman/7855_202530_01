@@ -39,3 +39,6 @@ venv.bak/
 src/uploads/*
 !src/uploads/.gitkeep
 
+# Miscellaneous
+7855_202530_01.code-workspace
+workflow.md
