@@ -17,39 +17,44 @@ SmartPost is a smart package delivery box system that allows users to securely r
 - Live video streaming and photo capture
 - Package arrival notifications
 - Review of footage from the last 24 hours
+
 ## Folder Structure
 
 ```
 code/
-├── src/    # Source code for core modules and services
+├── src/    # Flask application source
 ├── docs/   # Documentation, design notes, and diagrams
 ├── tests/  # Automated and manual test cases
-├── README.md
-└── ...
+└── README.md
 ```
 
-### In the src folder:
+### Inside `src/`
+
+The application follows a **blueprint-based modular architecture** — each feature area lives in its own package with clear boundaries.
 
 ```
-├── app.py
-├── config.py
-├── firebase.py
-├── requirements.txt
-├── serviceAccountKey.json
-├── .env
+src/
+├── app.py                  # App factory — init, config, and blueprint registration only
+├── config.py               # Centralised constants (paths, secrets, TTLs)
+├── firebase.py             # Firestore client initialisation
+│
 ├── blueprints/
-│   ├── auth/
-│   ├── profile/
-│   ├── device/
-│   ├── media/
-│   ├── notifications/
-│   ├── dashboard/
-│   └── api/
-├── decorators/
+│   ├── auth/               # Login, signup, logout & session handling
+│   ├── dashboard/          # Landing page and authenticated home view
+│   ├── device/             # Device page, live state & command API
+│   ├── media/              # Image upload, gallery listing & download
+│   ├── profile/            # User profile CRUD (Firestore-backed)
+│   └── notifications/      # Notification inbox, read/clear & demo presets
+│
 ├── utils/
-├── templates/
-├── static/
-└── uploads
+│   ├── auth.py             # User persistence, password helpers, session lookup
+│   ├── firestore.py        # Shared datetime / Firestore serialisation helpers
+│   └── notifications.py    # Notification service, channels & publisher
+│
+├── decorators/             # (Planned) @login_required route guards
+├── templates/              # Jinja2 HTML templates
+├── static/                 # CSS, JS, and static assets
+└── uploads/                # User-uploaded media (git-ignored)
 ```
 
 ## 🚀 Start Here: App Location
