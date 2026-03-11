@@ -1,8 +1,9 @@
 import json
+import os
 import threading
 from pathlib import Path
 
-from flask import session
+from flask import session, request, jsonify
 from werkzeug.security import generate_password_hash
 
 
@@ -44,6 +45,26 @@ def looks_like_hash(value: str) -> bool:
 
 def get_current_user():
     return session.get("username")
+
+
+# ---------------------------
+# Device auth (API key)
+# ---------------------------
+
+def require_device_api_key(device_id):
+    if device_id != "smartpost-pi-01":
+        return jsonify({"error": f"Unknown device '{device_id}'."}), 404
+
+    expected = os.getenv("SMARTPOST_PI_API_KEY")
+    if not expected:
+        return jsonify({"error": "Server device API key is not configured."}), 500
+
+    provided = request.headers.get("X-API-Key", "").strip()
+    if not provided or provided != expected:
+        return jsonify({"error": "Invalid device API key."}), 401
+
+    return None
+
 
 
 # ---------------------------
