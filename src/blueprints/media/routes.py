@@ -5,6 +5,7 @@ from werkzeug.utils import secure_filename
 
 from config import BASE_DIR, UPLOAD_ROOT, ALLOWED_IMAGE_EXTS
 from utils.auth import get_current_user, require_device_api_key
+from utils.device_access import user_can_access_device
 
 media_bp = Blueprint("media", __name__)
 
@@ -57,6 +58,9 @@ def media_device_camera_latest(device_id, camera_id):
     username = get_current_user()
     if not username:
         return jsonify({"error": "Not logged in."}), 401
+
+    if not user_can_access_device(username, device_id):
+        return jsonify({"error": "Forbidden"}), 403
 
     if camera_id not in (0, 1, 2):
         return jsonify({"error": "camera_id must be 0, 1, or 2."}), 400

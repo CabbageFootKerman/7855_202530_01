@@ -1,0 +1,35 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <title>My Devices</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
+</head>
+<body>
+    <main class="container">
+        <section class="card">
+            <h1>{{ username }}'s Devices</h1>
+
+            <p>
+                <a href="{{ url_for('device.pair_device_page') }}">Pair Device</a>
+            </p>
+
+            {% if devices %}
+                <ul>
+                    {% for device in devices %}
+                        <li>
+                            <strong>{{ device.display_name or device.id }}</strong><br>
+                            Device ID: {{ device.id }}<br>
+                            Door: {{ device.status.door_state if device.status else "unknown" }}<br>
+                            Weight: {{ device.status.weight_g if device.status else 0 }} g<br>
+                            <a href="{{ url_for('device.device_page', device_id=device.id) }}">Open Device</a>
+                        </li>
+                    {% endfor %}
+                </ul>
+            {% else %}
+                <p>No devices paired yet.</p>
+            {% endif %}
+        </section>
+    </main>
+</body>
+</html>

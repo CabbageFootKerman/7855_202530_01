@@ -1,0 +1,33 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <title>Pair Device</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
+</head>
+<body>
+    <main class="container">
+        <section class="card">
+            <h1>Pair Your Device</h1>
+
+            {% if error %}
+                <p style="color:red;">{{ error }}</p>
+            {% endif %}
+
+            <form method="post">
+                <div>
+                    <label for="device_id">Device ID</label>
+                    <input id="device_id" name="device_id" type="text" required>
+                </div>
+
+                <div>
+                    <label for="claim_code">Claim Code</label>
+                    <input id="claim_code" name="claim_code" type="text" required>
+                </div>
+
+                <button type="submit">Pair Device</button>
+            </form>
+        </section>
+    </main>
+</body>
+</html>

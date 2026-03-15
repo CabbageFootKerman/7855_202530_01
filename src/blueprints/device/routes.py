@@ -6,6 +6,7 @@ from flask import Blueprint, render_template, request, redirect, url_for, jsonif
 
 from utils.auth import get_current_user, require_device_api_key
 from utils.notifications import publish_device_notification
+from utils.device_access import user_can_access_device, claim_device
 
 device_bp = Blueprint("device", __name__)
 
@@ -18,17 +19,53 @@ def utc_now_iso():
     return datetime.now(timezone.utc).isoformat()
 
 
+@device_bp.route("/pair-device", methods=["GET"])
+def pair_device_page():
+    username = get_current_user()
+    if not username:
+        return redirect(url_for("auth.login"))
+    return render_template("pair_device.html", error=None)
+
+
+@device_bp.route("/pair-device", methods=["POST"])
+def pair_device_submit():
+    username = get_current_user()
+    if not username:
+        return redirect(url_for("auth.login"))
+
+    device_id = request.form.get("device_id", "").strip()
+    claim_code = request.form.get("claim_code", "").strip()
+
+    if not device_id or not claim_code:
+        return render_template("pair_device.html", error="Device ID and claim code are required.")
+
+    ok, message = claim_device(username, device_id, claim_code)
+    if not ok:
+        return render_template("pair_device.html", error=message)
+
+    return redirect(url_for("device.device_page", device_id=device_id))
+
+
 @device_bp.route("/device/<device_id>")
 def device_page(device_id):
-    if not get_current_user():
+    username = get_current_user()
+    if not username:
         return redirect(url_for("auth.login"))
+
+    if not user_can_access_device(username, device_id):
+        return jsonify({"error": "Forbidden"}), 403
+
     return render_template("device.html", device_id=device_id)
 
 
 @device_bp.route("/api/device/<device_id>/state", methods=["GET"])
 def api_device_state(device_id):
-    if not get_current_user():
+    username = get_current_user()
+    if not username:
         return jsonify({"error": "Not logged in."}), 401
+
+    if not user_can_access_device(username, device_id):
+        return jsonify({"error": "Forbidden"}), 403
 
     with DEVICE_LOCK:
         state = DEVICE_STATE.get(device_id, {
@@ -98,6 +135,9 @@ def api_device_command(device_id):
     username = get_current_user()
     if not username:
         return jsonify({"error": "Not logged in."}), 401
+
+    if not user_can_access_device(username, device_id):
+        return jsonify({"error": "Forbidden"}), 403
 
     if not request.is_json:
         return jsonify({"error": "Content-Type must be application/json."}), 415
