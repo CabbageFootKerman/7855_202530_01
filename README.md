@@ -60,6 +60,17 @@ src/
 ## 🚀 Start Here: App Location
 
 👉 **[Go to the app source folder (src/)](src/)** — The main application entry point is in [src/app.py](src/app.py).
+- Note: you will likely have to setup a venv/ if running on the pi:
+	cd Documents/20......./src
+	python3 -m venv venv
+	source venv/bin/activate
+	pip install -r requirements.txt
+		*or*
+	pip install -r ../requirements.txt
+- To run:
+	`cd Documents/20......./src`
+	`source venv/bin/activate`
+	`python app.py`
 
 ## Architectural Choices
 
