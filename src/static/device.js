@@ -9,9 +9,11 @@
   const elCmd = document.getElementById("cmdResult");
   const elDebug = document.getElementById("debugBox");
 
-  const cam1 = document.getElementById("cam1");
-  const cam2 = document.getElementById("cam2");
-  const cam3 = document.getElementById("cam3");
+  const camImgs = {
+    0: document.getElementById("cam0"),
+    1: document.getElementById("cam1"),
+    2: document.getElementById("cam2")
+  };
 
   const btnOpen = document.getElementById("btnOpen");
   const btnClose = document.getElementById("btnClose");
@@ -79,29 +81,7 @@
       elLast.textContent = formatTimestamp(data.last_update_iso);
     }
 
-    const cams = data.cameras || {};
-
-    /*
-      This supports either backend style:
-      - cam0, cam1, cam2
-      or
-      - cam1, cam2, cam3
-
-      HTML ids stay as cam1/cam2/cam3.
-    */
-    const cam1Url = cams.cam0 || cams.cam1 || "";
-    const cam2Url = cams.cam1 || cams.cam2 || "";
-    const cam3Url = cams.cam2 || cams.cam3 || "";
-
-    if (cam1) {
-      cam1.src = cacheBust(cam1Url);
-    }
-    if (cam2) {
-      cam2.src = cacheBust(cam2Url);
-    }
-    if (cam3) {
-      cam3.src = cacheBust(cam3Url);
-    }
+    // Camera images are loaded on-demand via snapshot buttons, not here.
 
     if (elDebug) {
       elDebug.textContent = JSON.stringify(data, null, 2);
@@ -163,6 +143,61 @@
       handleCommand("close");
     });
   }
+
+
+  // - Camera snapshot buttons (request-response via command queue) -
+  async function requestSnapshot(camId) {
+    // Queue a capture command for this camera
+    await fetchJson(
+      "/api/device/" + encodeURIComponent(deviceId) + "/command",
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ command: "capture", camera_id: Number(camId) })
+      }
+    );
+  }
+
+  async function pollForImage(camId, maxAttempts) {
+    var attempts = maxAttempts || 10;
+    var url = "/media/device/" + encodeURIComponent(deviceId)
+            + "/camera/" + camId + "/latest.jpg";
+    for (var i = 0; i < attempts; i++) {
+      await new Promise(function (r) { setTimeout(r, 1000); });
+      var resp = await fetch(url, { credentials: "same-origin" });
+      if (resp.ok) return await resp.blob();
+    }
+    return null;
+  }
+
+  document.querySelectorAll(".snap-btn").forEach(function (btn) {
+    btn.addEventListener("click", async function () {
+      var camId = btn.getAttribute("data-cam");
+      var statusEl = document.getElementById("camStatus" + camId);
+      var img = camImgs[Number(camId)];
+
+      btn.disabled = true;
+      if (statusEl) statusEl.textContent = "Requesting capture...";
+
+      try {
+        await requestSnapshot(camId);
+        if (statusEl) statusEl.textContent = "Waiting for device...";
+
+        var blob = await pollForImage(camId, 10);
+        if (blob) {
+          if (img) img.src = URL.createObjectURL(blob);
+          if (statusEl) statusEl.textContent = "";
+        } else {
+          if (statusEl) statusEl.textContent = "Timed out waiting for snapshot.";
+        }
+      } catch (e) {
+        if (statusEl) statusEl.textContent = String(e.message || e);
+      } finally {
+        btn.disabled = false;
+      }
+    });
+  });
+
 
   async function loop() {
     try {

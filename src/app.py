@@ -1,11 +1,12 @@
 from flask import Flask
 
 from config import FLASK_SECRET_KEY, UPLOAD_ROOT, FIREBASE_WEB_API_KEY, SENSOR_API_KEY
+from extensions import limiter
 
 print("--- SmartPost Startup Check ---")
 print(f"  FLASK_SECRET_KEY set?       {bool(FLASK_SECRET_KEY)}")
 print(f"  FIREBASE_WEB_API_KEY set?   {bool(FIREBASE_WEB_API_KEY)}")
-print(f"  SENSOR_API_KEY set?         {bool(SENSOR_API_KEY)}")
+#print(f"  SENSOR_API_KEY set?         {bool(SENSOR_API_KEY)}")
 print("-------------------------------")
 
 # Blueprint imports
@@ -19,6 +20,9 @@ from blueprints.notifications.routes import notifications_bp
 
 app = Flask(__name__)
 app.secret_key = FLASK_SECRET_KEY
+
+# Rate limiter (shared instance from extensions.py)
+limiter.init_app(app)
 
 # Ensure uploads directory exists
 UPLOAD_ROOT.mkdir(parents=True, exist_ok=True)

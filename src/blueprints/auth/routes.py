@@ -3,6 +3,7 @@ from flask import Blueprint, render_template, request, redirect, url_for, sessio
 from firebase_admin import auth as firebase_auth
 
 from config import FIREBASE_WEB_API_KEY
+from extensions import limiter
 from firebase import db
 
 auth_bp = Blueprint("auth", __name__)
@@ -37,6 +38,7 @@ def _friendly_error(raw_message, fallback="Something went wrong."):
 # --------------------------------------------------
 
 @auth_bp.route("/login", methods=["GET", "POST"])
+@limiter.limit("10 per minute")
 def login():
     if request.method == "GET":
         return render_template("login.html", error=None)
@@ -73,6 +75,7 @@ def login():
 
 
 @auth_bp.route("/signup", methods=["GET", "POST"])
+@limiter.limit("5 per minute")
 def signup():
     if request.method == "GET":
         return render_template("signup.html", error=None)

@@ -1,13 +1,29 @@
+import secrets
 from firebase import db
 from firebase_admin import firestore
 
-device_id = "smartpost-pi-01"
+# --- Interactive device provisioning ---
+
+device_id = input("Device ID [smartpost-pi-01]: ").strip() or "smartpost-pi-01"
+display_name = input("Display name [SmartPost Main Unit]: ").strip() or "SmartPost Main Unit"
+
+generated_code = secrets.token_hex(4).upper()  # e.g. "A3F1B90C"
+claim_code = input(f"Claim code [{generated_code}]: ").strip() or generated_code
+
+print(f"\n  Device ID:    {device_id}")
+print(f"  Display name: {display_name}")
+print(f"  Claim code:   {claim_code}")
+
+confirm = input("\nWrite to Firestore? [Y/n]: ").strip().lower()
+if confirm not in ("", "y", "yes"):
+    print("Aborted.")
+    raise SystemExit(0)
 
 db.collection("devices").document(device_id).set({
-    "display_name": "SmartPost Main Unit",
+    "display_name": display_name,
     "owner_username": "",
     "allowed_users": [],
-    "claim_code": "ABC123",
+    "claim_code": claim_code,
     "paired_at": None,
     "created_at": firestore.SERVER_TIMESTAMP,
     "is_claimed": False,
@@ -24,6 +40,6 @@ db.collection("devices").document(device_id).set({
 }, merge=True)
 
 doc = db.collection("devices").document(device_id).get()
-print("Seeded device:", device_id)
+print("\nSeeded device:", device_id)
 print("Exists after write?", doc.exists)
 print("Data:", doc.to_dict())

@@ -6,7 +6,7 @@ from werkzeug.utils import secure_filename
 from config import BASE_DIR, UPLOAD_ROOT, ALLOWED_IMAGE_EXTS
 from utils.auth import require_device_api_key
 from utils.device_access import user_can_access_device
-from decorators.auth import api_login_required
+from decorators.auth import login_required
 
 media_bp = Blueprint("media", __name__)
 
@@ -55,7 +55,7 @@ def api_device_camera_snapshot(device_id, camera_id):
 
 
 @media_bp.route("/media/device/<device_id>/camera/<int:camera_id>/latest.jpg", methods=["GET"])
-@api_login_required
+@login_required
 def media_device_camera_latest(username, device_id, camera_id):
     if not user_can_access_device(username, device_id):
         return jsonify({"error": "Forbidden"}), 403

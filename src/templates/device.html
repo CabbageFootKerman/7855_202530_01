@@ -263,9 +263,21 @@
         <section class="card">
             <h2>Cameras</h2>
             <div class="cam-grid">
-                <img id="cam1" class="cam-img" alt="Cam 1" />
-                <img id="cam2" class="cam-img" alt="Cam 2" />
-                <img id="cam3" class="cam-img" alt="Cam 3" />
+                <div class="cam-slot">
+                    <img id="cam0" class="cam-img" alt="Camera 0" />
+                    <button class="btn btn-primary snap-btn" data-cam="0" type="button">Snapshot Cam 0</button>
+                    <span id="camStatus0" class="muted"></span>
+                </div>
+                <div class="cam-slot">
+                    <img id="cam1" class="cam-img" alt="Camera 1" />
+                    <button class="btn btn-primary snap-btn" data-cam="1" type="button">Snapshot Cam 1</button>
+                    <span id="camStatus1" class="muted"></span>
+                </div>
+                <div class="cam-slot">
+                    <img id="cam2" class="cam-img" alt="Camera 2" />
+                    <button class="btn btn-primary snap-btn" data-cam="2" type="button">Snapshot Cam 2</button>
+                    <span id="camStatus2" class="muted"></span>
+                </div>
             </div>
         </section>
 

@@ -9,6 +9,8 @@ from utils.notifications import publish_device_notification
 from utils.device_access import user_can_access_device, claim_device
 from decorators.auth import login_required, api_login_required
 
+from extensions import limiter
+
 device_bp = Blueprint("device", __name__)
 
 DEVICE_STATE = {}
@@ -27,6 +29,7 @@ def pair_device_page(username):
 
 
 @device_bp.route("/pair-device", methods=["POST"])
+@limiter.limit("5 per minute")
 @login_required
 def pair_device_submit(username):
     device_id = request.form.get("device_id", "").strip()
@@ -121,6 +124,7 @@ def api_device_telemetry(device_id):
     return jsonify({"message": "Telemetry received."}), 200
 
 
+
 @device_bp.route("/api/device/<device_id>/command", methods=["POST"])
 @api_login_required
 def api_device_command(username, device_id):
@@ -133,14 +137,25 @@ def api_device_command(username, device_id):
     data = request.get_json(silent=True) or {}
     cmd = data.get("command")
 
-    if cmd not in ("open", "close"):
-        return jsonify({"error": "command must be 'open' or 'close'."}), 400
+    ALLOWED_COMMANDS = ("open", "close", "capture")
+    if cmd not in ALLOWED_COMMANDS:
+        return jsonify({"error": f"command must be one of {ALLOWED_COMMANDS}."}), 400
 
     queued_item = {
         "command": cmd,
         "created_at": utc_now_iso(),
         "created_by": username,
     }
+
+    # For capture commands, include which camera to capture
+    if cmd == "capture":
+        try:
+            camera_id = int(data.get("camera_id", -1))
+        except (TypeError, ValueError):
+            return jsonify({"error": "camera_id must be an integer."}), 400
+        if camera_id not in (0, 1, 2):
+            return jsonify({"error": "camera_id must be 0, 1, or 2."}), 400
+        queued_item["camera_id"] = camera_id
 
     with DEVICE_LOCK:
         if device_id not in DEVICE_COMMANDS:
@@ -167,6 +182,7 @@ def api_device_command(username, device_id):
         "message": f"Command '{cmd}' queued for {device_id}.",
         "notification": notif_result,
     }), 200
+
 
 
 @device_bp.route("/api/device/<device_id>/command/next", methods=["GET"])
