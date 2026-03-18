@@ -71,6 +71,7 @@ src/
 	`cd Documents/20......./src`
 	`source venv/bin/activate`
 	`python app.py`
+- To run on windows, run as any other python app
 
 ## Architectural Choices
 
