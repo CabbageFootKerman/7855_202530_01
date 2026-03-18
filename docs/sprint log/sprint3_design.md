@@ -14,10 +14,21 @@
 3. Glen Healy
 4. Ryan McKay
 
-**Pawel Banasik:** ![Pawel's Sprint Board](images/sprint3-board-pawel.png)
-**Mikhail Rego:** ![Mikhail's Sprint Board](images/sprint3-board-mikhail.png)
-**Glen Healy:** ![Glen's Sprint Board](images/sprint3-board-glen.png)
-**Ryan McKay:** ![Ryan's Sprint Board](images/sprint3-board-ryan.png)
+**Pawel Banasik:** 
+![Pawel's Sprint Board](images/sprint3-board-pawel.png)
+
+
+**Mikhail Rego:** 
+![Mikhail's Sprint Board](images/sprint3-board-mikhail.png)
+
+
+**Glen Healy:** 
+![Glen's Sprint Board](images/sprint3-board-glen.png)
+
+
+**Ryan McKay:** 
+![Ryan's Sprint Board](images/sprint3-board-ryan.png)
+
 
 ## 2. Sprint Review (Planned vs. Delivered)
 *Review what you planned to accomplish this sprint versus what was actually completed. Focus on your architecture, testing, and UI goals.*
