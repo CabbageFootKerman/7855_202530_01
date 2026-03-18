@@ -1,18 +1,12 @@
-from pathlib import Path
-from dotenv import load_dotenv
 from flask import Flask
-import os
 
-# Load .env before importing config/blueprints
-env_path = Path(__file__).resolve().parent / ".env"
-load_dotenv(env_path, override=True)
+from config import FLASK_SECRET_KEY, UPLOAD_ROOT, FIREBASE_WEB_API_KEY, SENSOR_API_KEY
 
-print("ENV PATH:", env_path)
-print("ENV EXISTS:", env_path.exists())
-print("SMARTPOST_PI_API_KEY loaded?", bool(os.getenv("SMARTPOST_PI_API_KEY")))
-print("SMARTPOST_PI_API_KEY value:", os.getenv("SMARTPOST_PI_API_KEY"))
-
-from config import FLASK_SECRET_KEY, UPLOAD_ROOT
+print("--- SmartPost Startup Check ---")
+print(f"  FLASK_SECRET_KEY set?       {bool(FLASK_SECRET_KEY)}")
+print(f"  FIREBASE_WEB_API_KEY set?   {bool(FIREBASE_WEB_API_KEY)}")
+print(f"  SENSOR_API_KEY set?         {bool(SENSOR_API_KEY)}")
+print("-------------------------------")
 
 # Blueprint imports
 from blueprints.dashboard.routes import dashboard_bp

@@ -4,9 +4,10 @@ from threading import Lock
 
 from flask import Blueprint, render_template, request, redirect, url_for, jsonify, current_app
 
-from utils.auth import get_current_user, require_device_api_key
+from utils.auth import require_device_api_key
 from utils.notifications import publish_device_notification
 from utils.device_access import user_can_access_device, claim_device
+from decorators.auth import login_required, api_login_required
 
 device_bp = Blueprint("device", __name__)
 
@@ -20,19 +21,14 @@ def utc_now_iso():
 
 
 @device_bp.route("/pair-device", methods=["GET"])
-def pair_device_page():
-    username = get_current_user()
-    if not username:
-        return redirect(url_for("auth.login"))
+@login_required
+def pair_device_page(username):
     return render_template("pair_device.html", error=None)
 
 
 @device_bp.route("/pair-device", methods=["POST"])
-def pair_device_submit():
-    username = get_current_user()
-    if not username:
-        return redirect(url_for("auth.login"))
-
+@login_required
+def pair_device_submit(username):
     device_id = request.form.get("device_id", "").strip()
     claim_code = request.form.get("claim_code", "").strip()
 
@@ -47,11 +43,8 @@ def pair_device_submit():
 
 
 @device_bp.route("/device/<device_id>")
-def device_page(device_id):
-    username = get_current_user()
-    if not username:
-        return redirect(url_for("auth.login"))
-
+@login_required
+def device_page(username, device_id):
     if not user_can_access_device(username, device_id):
         return jsonify({"error": "Forbidden"}), 403
 
@@ -59,11 +52,8 @@ def device_page(device_id):
 
 
 @device_bp.route("/api/device/<device_id>/state", methods=["GET"])
-def api_device_state(device_id):
-    username = get_current_user()
-    if not username:
-        return jsonify({"error": "Not logged in."}), 401
-
+@api_login_required
+def api_device_state(username, device_id):
     if not user_can_access_device(username, device_id):
         return jsonify({"error": "Forbidden"}), 403
 
@@ -92,6 +82,7 @@ def api_device_state(device_id):
             "cam2": f"/media/device/{device_id}/camera/2/latest.jpg",
         }
     }), 200
+
 
 
 @device_bp.route("/api/device/<device_id>/telemetry", methods=["POST"])
@@ -131,11 +122,8 @@ def api_device_telemetry(device_id):
 
 
 @device_bp.route("/api/device/<device_id>/command", methods=["POST"])
-def api_device_command(device_id):
-    username = get_current_user()
-    if not username:
-        return jsonify({"error": "Not logged in."}), 401
-
+@api_login_required
+def api_device_command(username, device_id):
     if not user_can_access_device(username, device_id):
         return jsonify({"error": "Forbidden"}), 403
 
