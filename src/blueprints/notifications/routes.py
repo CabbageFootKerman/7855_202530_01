@@ -1,10 +1,13 @@
 from flask import Blueprint, request, jsonify
 from firebase_admin import firestore
+from collections import OrderedDict
+from datetime import datetime, timedelta, timezone
 
 from firebase import db
 from utils.firestore import _serialize_doc
 from utils.notifications import publish_device_notification
 from decorators.auth import api_login_required
+from utils.device_access import user_can_access_device
 
 notifications_bp = Blueprint("notifications", __name__)
 
@@ -18,9 +21,7 @@ def api_notifications_list(username):
     except ValueError:
         return jsonify({"error": "limit must be an integer"}), 400
 
-    # clamp limit for safety
     limit = max(1, min(limit, 100))
-
     unread_only = request.args.get("unread_only", "false").lower() in ("1", "true", "yes")
 
     q = (
@@ -32,7 +33,6 @@ def api_notifications_list(username):
     if unread_only:
         q = q.where("read", "==", False)
 
-    # Order newest first. Firestore may require indexes as this grows.
     q = q.order_by("created_at", direction=firestore.Query.DESCENDING).limit(limit)
 
     docs = list(q.stream())
@@ -55,8 +55,6 @@ def api_notifications_unread_count(username):
         .where("read", "==", False)
     )
 
-    # Simple scaffold implementation (fine for demo/small volume).
-    # Teammates can replace with aggregated counters later.
     count = sum(1 for _ in q.stream())
 
     return jsonify({
@@ -120,16 +118,6 @@ def api_notifications_mark_all_read(username):
 @notifications_bp.route("/api/notifications/clear", methods=["POST"])
 @api_login_required
 def api_notifications_clear(username):
-    """
-    Clear notifications from the logged-in user's inbox.
-
-    Optional JSON body:
-      {
-        "mode": "all" | "read"
-      }
-
-    Default mode is "read" (safer).
-    """
     data = request.get_json(silent=True) or {}
     mode = (data.get("mode") or "read").strip().lower()
 
@@ -154,10 +142,8 @@ def api_notifications_clear(username):
             "mode": mode
         }), 200
 
-    # Firestore batched writes support up to 500 ops per batch.
-    # This scaffold handles that safely by chunking.
     total_deleted = 0
-    BATCH_SIZE = 450  # leave headroom
+    BATCH_SIZE = 450
 
     for i in range(0, len(docs), BATCH_SIZE):
         batch = db.batch()
@@ -177,10 +163,6 @@ def api_notifications_clear(username):
 @notifications_bp.route("/api/device/<device_id>/demo-notify", methods=["POST"])
 @api_login_required
 def api_device_demo_notify(username, device_id):
-    """
-    Demo route to generate notifications without real hardware events.
-    Integrates with your existing device-centric API style.
-    """
     data = request.get_json(silent=True) or {}
     preset = (data.get("preset") or "package_detected").strip()
 
@@ -236,4 +218,75 @@ def api_device_demo_notify(username, device_id):
         "message": "Demo notification generated",
         "preset": preset,
         "notification": result,
+    }), 200
+
+
+def _parse_iso_datetime(value):
+    if not value:
+        return None
+    try:
+        return datetime.fromisoformat(value.replace("Z", "+00:00"))
+    except Exception:
+        return None
+
+
+@notifications_bp.route("/api/device/<device_id>/door-close-chart", methods=["GET"])
+@api_login_required
+def api_device_door_close_chart(username, device_id):
+    if not user_can_access_device(username, device_id):
+        return jsonify({"error": "Forbidden"}), 403
+
+    try:
+        hours = int(request.args.get("hours", "24"))
+    except ValueError:
+        return jsonify({"error": "hours must be an integer"}), 400
+
+    hours = max(1, min(hours, 168))
+
+    now = datetime.now(timezone.utc).replace(minute=0, second=0, microsecond=0)
+    start = now - timedelta(hours=hours - 1)
+
+    buckets = OrderedDict()
+    current = start
+    while current <= now:
+        label = current.strftime("%m-%d %H:00")
+        buckets[label] = 0
+        current += timedelta(hours=1)
+
+    q = db.collection("notification_events").where("device_id", "==", device_id)
+    docs = list(q.stream())
+
+    for doc in docs:
+        item = doc.to_dict() or {}
+        event_type = item.get("type")
+
+        if event_type not in ("door_closed", "door_close_requested"):
+            continue
+
+        dt = item.get("logged_at")
+        if dt is None:
+            dt = _parse_iso_datetime(item.get("created_at_client_iso"))
+
+        if dt is None:
+            continue
+
+        if dt.tzinfo is None:
+            dt = dt.replace(tzinfo=timezone.utc)
+        else:
+            dt = dt.astimezone(timezone.utc)
+
+        if dt < start or dt > now + timedelta(hours=1):
+            continue
+
+        bucket_dt = dt.replace(minute=0, second=0, microsecond=0)
+        label = bucket_dt.strftime("%m-%d %H:00")
+
+        if label in buckets:
+            buckets[label] += 1
+
+    return jsonify({
+        "device_id": device_id,
+        "labels": list(buckets.keys()),
+        "values": list(buckets.values()),
+        "total": sum(buckets.values()),
     }), 200
