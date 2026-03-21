@@ -33,6 +33,33 @@ def _friendly_error(raw_message, fallback="Something went wrong."):
     return fallback
 
 
+def _extract_id_token_from_request(data: dict) -> str:
+    id_token = (data.get("idToken") or "").strip()
+    if id_token:
+        return id_token
+
+    auth_header = request.headers.get("Authorization", "").strip()
+    if auth_header.startswith("Bearer "):
+        return auth_header.removeprefix("Bearer ").strip()
+
+    return ""
+
+
+def _start_user_session_from_id_token(id_token: str) -> dict:
+    decoded = firebase_auth.verify_id_token(id_token)
+
+    uid = decoded.get("uid") or decoded.get("user_id") or decoded.get("sub")
+    if not uid:
+        raise ValueError("Verified token did not contain a user id")
+
+    session.clear()
+    session["logged_in"] = True
+    session["username"] = uid
+    session["email"] = decoded.get("email")
+    session["id_token"] = id_token
+
+    return decoded
+
 # --------------------------------------------------
 # Web form routes
 # --------------------------------------------------
@@ -67,11 +94,14 @@ def login():
         return render_template("login.html", error=_friendly_error(raw, "Invalid credentials."))
 
     data = resp.json()
-    session["logged_in"] = True
-    session["username"] = data["localId"]   # Firebase UID
-    session["email"] = data["email"]
-    session["id_token"] = data["idToken"]
+    
+    try:
+        _start_user_session_from_id_token(data["idToken"])
+    except Exception:
+        return render_template("login.html", error="Authentication failed.")
+
     return redirect(url_for("dashboard.home"))
+
 
 
 @auth_bp.route("/signup", methods=["GET", "POST"])
@@ -115,26 +145,47 @@ def logout():
 
 def api_login():
     data = request.get_json(silent=True) or {}
-    email = data.get("email")
-    password = data.get("password")
+    id_token = _extract_id_token_from_request(data)
 
-    if not email or not password:
-        return jsonify({"error": "Email and password are required"}), 400
+    # Backward-compatible path: accept email/password, sign in with Firebase,
+    # then verify the returned ID token before treating the user as logged in.
+    if not id_token:
+        email = (data.get("email") or "").strip()
+        password = data.get("password") or ""
+
+        if email and password:
+            try:
+                resp = http_requests.post(
+                    FIREBASE_SIGN_IN_URL,
+                    json={
+                        "email": email,
+                        "password": password,
+                        "returnSecureToken": True,
+                    },
+                    timeout=10,
+                )
+            except http_requests.RequestException:
+                return jsonify({"error": "Authentication service unavailable"}), 503
+
+            if resp.status_code != 200:
+                return jsonify({"error": "Unauthorized"}), 401
+
+            id_token = (resp.json().get("idToken") or "").strip()
+
+    if not id_token:
+        return jsonify({"error": "Unauthorized"}), 401
 
     try:
-        resp = http_requests.post(FIREBASE_SIGN_IN_URL, json={
-            "email": email,
-            "password": password,
-            "returnSecureToken": True,
-        }, timeout=10)
-    except http_requests.RequestException:
-        return jsonify({"error": "Authentication service unavailable"}), 503
+        decoded = _start_user_session_from_id_token(id_token)
+    except Exception:
+        return jsonify({"error": "Unauthorized"}), 401
 
-    if resp.status_code == 200:
-        return jsonify({"token": resp.json()["idToken"]}), 200
-
-    return jsonify({"error": "Invalid credentials"}), 401
-
+    return jsonify({
+        "message": "Login successful",
+        "username": session["username"],
+        "email": decoded.get("email"),
+        "token": id_token,
+    }), 200
 
 def api_signup():
     data = request.get_json(silent=True) or {}
