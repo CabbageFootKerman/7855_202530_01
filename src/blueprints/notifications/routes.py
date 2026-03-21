@@ -2,19 +2,16 @@ from flask import Blueprint, request, jsonify
 from firebase_admin import firestore
 
 from firebase import db
-from utils.auth import get_current_user
 from utils.firestore import _serialize_doc
 from utils.notifications import publish_device_notification
+from decorators.auth import api_login_required
 
 notifications_bp = Blueprint("notifications", __name__)
 
 
 @notifications_bp.route("/api/notifications", methods=["GET"])
-def api_notifications_list():
-    username = get_current_user()
-    if not username:
-        return jsonify({"error": "Not logged in."}), 401
-
+@api_login_required
+def api_notifications_list(username):
     try:
         limit_raw = request.args.get("limit", "20")
         limit = int(limit_raw)
@@ -49,11 +46,8 @@ def api_notifications_list():
 
 
 @notifications_bp.route("/api/notifications/unread-count", methods=["GET"])
-def api_notifications_unread_count():
-    username = get_current_user()
-    if not username:
-        return jsonify({"error": "Not logged in."}), 401
-
+@api_login_required
+def api_notifications_unread_count(username):
     q = (
         db.collection("users")
         .document(username)
@@ -72,11 +66,8 @@ def api_notifications_unread_count():
 
 
 @notifications_bp.route("/api/notifications/<notification_id>/read", methods=["POST"])
-def api_notifications_mark_read(notification_id):
-    username = get_current_user()
-    if not username:
-        return jsonify({"error": "Not logged in."}), 401
-
+@api_login_required
+def api_notifications_mark_read(username, notification_id):
     doc_ref = (
         db.collection("users")
         .document(username)
@@ -100,11 +91,8 @@ def api_notifications_mark_read(notification_id):
 
 
 @notifications_bp.route("/api/notifications/read-all", methods=["POST"])
-def api_notifications_mark_all_read():
-    username = get_current_user()
-    if not username:
-        return jsonify({"error": "Not logged in."}), 401
-
+@api_login_required
+def api_notifications_mark_all_read(username):
     q = (
         db.collection("users")
         .document(username)
@@ -130,7 +118,8 @@ def api_notifications_mark_all_read():
 
 
 @notifications_bp.route("/api/notifications/clear", methods=["POST"])
-def api_notifications_clear():
+@api_login_required
+def api_notifications_clear(username):
     """
     Clear notifications from the logged-in user's inbox.
 
@@ -141,10 +130,6 @@ def api_notifications_clear():
 
     Default mode is "read" (safer).
     """
-    username = get_current_user()
-    if not username:
-        return jsonify({"error": "Not logged in."}), 401
-
     data = request.get_json(silent=True) or {}
     mode = (data.get("mode") or "read").strip().lower()
 
@@ -190,15 +175,12 @@ def api_notifications_clear():
 
 
 @notifications_bp.route("/api/device/<device_id>/demo-notify", methods=["POST"])
-def api_device_demo_notify(device_id):
+@api_login_required
+def api_device_demo_notify(username, device_id):
     """
     Demo route to generate notifications without real hardware events.
     Integrates with your existing device-centric API style.
     """
-    username = get_current_user()
-    if not username:
-        return jsonify({"error": "Not logged in."}), 401
-
     data = request.get_json(silent=True) or {}
     preset = (data.get("preset") or "package_detected").strip()
 

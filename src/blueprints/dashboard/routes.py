@@ -1,18 +1,28 @@
-from flask import Blueprint, render_template, redirect, url_for
+from flask import Blueprint, render_template, redirect, url_for, session
 
 from utils.auth import get_current_user
+from utils.device_access import get_user_devices
+from decorators.auth import login_required
 
 dashboard_bp = Blueprint("dashboard", __name__)
 
 
 @dashboard_bp.route("/")
 def home():
-    # If not logged in, show landing page with Login + Sign Up buttons
-    if not get_current_user():
+    username = get_current_user()
+
+    if not username:
         return render_template(
             "landing.html",
             project_name="Smart Post"
         )
 
-    # If logged in, send them to a demo device page
-    return redirect(url_for("device.device_page", device_id="demo123"))
+    return redirect(url_for("dashboard.devices_page"))
+
+
+@dashboard_bp.route("/devices")
+@login_required
+def devices_page(username):
+    devices = get_user_devices(username)
+    display_name = session.get("email", username)
+    return render_template("devices.html", devices=devices, username=display_name)

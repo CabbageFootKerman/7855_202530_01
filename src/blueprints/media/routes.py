@@ -1,25 +1,24 @@
 from pathlib import Path
-from datetime import datetime, timedelta
 
 from flask import Blueprint, request, jsonify, send_file
 from werkzeug.utils import secure_filename
-from firebase_admin import firestore
-import uuid
 
-from config import BASE_DIR, UPLOAD_ROOT, ALLOWED_IMAGE_EXTS, MEDIA_TTL_SECONDS
-from firebase import db
-from utils.auth import get_current_user
-from utils.firestore import _utc_now_dt, _normalize_fs_dt, _serialize_firestore_value
-from utils.notifications import publish_device_notification
+from config import BASE_DIR, UPLOAD_ROOT, ALLOWED_IMAGE_EXTS
+from utils.auth import require_device_api_key
+from utils.device_access import user_can_access_device
+from decorators.auth import login_required
 
 media_bp = Blueprint("media", __name__)
 
 
-@media_bp.route("/api/device/<device_id>/upload-image", methods=["POST"])
-def api_device_upload_image(device_id):
-    username = get_current_user()
-    if not username:
-        return jsonify({"error": "Not logged in."}), 401
+@media_bp.route("/api/device/<device_id>/camera/<int:camera_id>/snapshot", methods=["POST"])
+def api_device_camera_snapshot(device_id, camera_id):
+    auth_error = require_device_api_key(device_id)
+    if auth_error:
+        return auth_error
+
+    if camera_id not in (0, 1, 2):
+        return jsonify({"error": "camera_id must be 0, 1, or 2."}), 400
 
     if "image" not in request.files:
         return jsonify({"error": "Missing file field 'image' (multipart/form-data)."}), 400
@@ -30,137 +29,43 @@ def api_device_upload_image(device_id):
 
     original_name = secure_filename(f.filename)
     ext = Path(original_name).suffix.lower()
+
     if ext not in ALLOWED_IMAGE_EXTS:
-        return jsonify({"error": f"Unsupported file type {ext}. Allowed: {sorted(ALLOWED_IMAGE_EXTS)}"}), 400
+        return jsonify({
+            "error": f"Unsupported file type {ext}. Allowed: {sorted(ALLOWED_IMAGE_EXTS)}"
+        }), 400
 
-    upload_id = str(uuid.uuid4())
-    stored_filename = f"{upload_id}{ext}"
-
-    device_dir = UPLOAD_ROOT / f"device_{device_id}"
+    device_dir = UPLOAD_ROOT / f"device_{device_id}" / "latest"
     device_dir.mkdir(parents=True, exist_ok=True)
 
-    stored_path = device_dir / stored_filename
-
-    # Save to disk
+    stored_path = device_dir / f"cam{camera_id}.jpg"
     f.save(stored_path)
 
     size_bytes = stored_path.stat().st_size
-    content_type = f.mimetype or "application/octet-stream"
 
-    now = _utc_now_dt()
-    expires_at = now.replace()  # copy
-    expires_at = expires_at + timedelta(seconds=MEDIA_TTL_SECONDS)
-
-    # Store metadata in Firestore
-    doc = {
-        "device_id": device_id,
-        "uploaded_by": username,
-        "original_filename": original_name,
-        "stored_filename": stored_filename,
-        # store a repo-relative path so teammates on different machines don't leak absolute paths
-        "relative_path": str(stored_path.relative_to(BASE_DIR)).replace("\\", "/"),
-        "content_type": content_type,
-        "size_bytes": int(size_bytes),
-        "created_at": firestore.SERVER_TIMESTAMP,
-        "expires_at": expires_at,  # Firestore will store as timestamp
-        "ttl_seconds": MEDIA_TTL_SECONDS,
-    }
-
-    db.collection("media_uploads").document(upload_id).set(doc)
-
-    # generate a notification
-    try:
-        publish_device_notification(
-            actor_username=username,
-            device_id=device_id,
-            notif_type="image_uploaded",
-            title="Image uploaded",
-            body=f"{username} uploaded {original_name}",
-            severity="info",
-            data={"upload_id": upload_id, "filename": original_name},
-        )
-    except Exception:
-        pass
+    print(f"Snapshot received: device={device_id}, camera={camera_id}", flush=True)
 
     return jsonify({
-        "message": "Uploaded",
-        "upload_id": upload_id,
+        "message": "Latest snapshot updated.",
         "device_id": device_id,
-        "original_filename": original_name,
+        "camera_id": camera_id,
         "size_bytes": int(size_bytes),
-        "content_type": content_type,
-        "expires_in_seconds": MEDIA_TTL_SECONDS,
-    }), 201
-
-
-@media_bp.route("/api/media", methods=["GET"])
-def api_media_list():
-    username = get_current_user()
-    if not username:
-        return jsonify({"error": "Not logged in."}), 401
-
-    device_id = (request.args.get("device_id") or "").strip()
-    if not device_id:
-        return jsonify({"error": "device_id query param is required"}), 400
-
-    # Query by device_id, then filter TTL in Python to avoid requiring extra Firestore indexes.
-    q = (
-        db.collection("media_uploads")
-        .where("device_id", "==", device_id)
-        .order_by("created_at", direction=firestore.Query.DESCENDING)
-        .limit(50)
-    )
-
-    now = _utc_now_dt()
-    items = []
-    for doc in q.stream():
-        d = doc.to_dict() or {}
-        exp = d.get("expires_at")
-        if isinstance(exp, datetime):
-            exp = _normalize_fs_dt(exp)
-            if exp <= now:
-                continue
-
-        d = _serialize_firestore_value(d)
-        d["id"] = doc.id
-        items.append(d)
-
-    return jsonify({
-        "device_id": device_id,
-        "count": len(items),
-        "items": items
+        "path": str(stored_path.relative_to(BASE_DIR)).replace("\\", "/"),
     }), 200
 
 
-@media_bp.route("/api/media/<upload_id>/download", methods=["GET"])
-def api_media_download(upload_id):
-    username = get_current_user()
-    if not username:
-        return jsonify({"error": "Not logged in."}), 401
+@media_bp.route("/media/device/<device_id>/camera/<int:camera_id>/latest.jpg", methods=["GET"])
+@login_required
+def media_device_camera_latest(username, device_id, camera_id):
+    if not user_can_access_device(username, device_id):
+        return jsonify({"error": "Forbidden"}), 403
 
-    doc = db.collection("media_uploads").document(upload_id).get()
-    if not doc.exists:
-        return jsonify({"error": "Not found"}), 404
+    if camera_id not in (0, 1, 2):
+        return jsonify({"error": "camera_id must be 0, 1, or 2."}), 400
 
-    data = doc.to_dict() or {}
+    image_path = UPLOAD_ROOT / f"device_{device_id}" / "latest" / f"cam{camera_id}.jpg"
 
-    exp = data.get("expires_at")
-    if isinstance(exp, datetime):
-        exp = _normalize_fs_dt(exp)
-        if exp <= _utc_now_dt():
-            return jsonify({"error": "File expired"}), 410
+    if not image_path.exists():
+        return jsonify({"error": "Snapshot not found."}), 404
 
-    rel = data.get("relative_path")
-    if not rel:
-        return jsonify({"error": "Missing relative_path in metadata"}), 500
-
-    # Resolve path safely and ensure it stays within UPLOAD_ROOT
-    abs_path = (BASE_DIR / rel).resolve()
-    if not str(abs_path).startswith(str(UPLOAD_ROOT.resolve())):
-        return jsonify({"error": "Invalid path"}), 400
-
-    if not abs_path.exists():
-        return jsonify({"error": "File missing on server"}), 410
-
-    download_name = data.get("original_filename") or abs_path.name
-    return send_file(abs_path, as_attachment=True, download_name=download_name)
+    return send_file(image_path, mimetype="image/jpeg")
