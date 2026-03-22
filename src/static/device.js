@@ -8,6 +8,7 @@
   const elLast = document.getElementById("lastUpdate");
   const elCmd = document.getElementById("cmdResult");
   const elDebug = document.getElementById("debugBox");
+  const elPageMessage = document.getElementById("pageMessage");
 
   let commandBusy = false;
   let lastStateError = "";
@@ -23,6 +24,8 @@
   const btnClose = document.getElementById("btnClose");
 
   const POLL_MS = 1000;
+  let authRedirecting = false;
+  let pollingStopped = false;
 
   function cacheBust(url) {
     if (!url) return "";
@@ -124,26 +127,86 @@
         }
     }
 
-  async function fetchJson(url, options) {
-    const res = await fetch(url, {
-      credentials: "same-origin",
-      ...(options || {})
-    });
-
-    let data = null;
-    try {
-      data = await res.json();
-    } catch (_) {
-      data = null;
+    function showPageMessage(message, level) {
+        if (!elPageMessage) return;
+        elPageMessage.textContent = message || "";
+        elPageMessage.classList.remove("hidden", "info", "error");
+        elPageMessage.classList.add(level === "info" ? "info" : "error");
     }
 
-    if (!res.ok) {
-      const msg = data && data.error ? data.error : "HTTP " + res.status;
-      throw new Error(msg);
+    function clearPageMessage() {
+        if (!elPageMessage) return;
+        elPageMessage.textContent = "";
+        elPageMessage.classList.add("hidden");
+        elPageMessage.classList.remove("info", "error");
     }
 
-    return data;
-  }
+    function setSnapshotButtonsDisabled(disabled) {
+        document.querySelectorAll(".snap-btn").forEach(function (btn) {
+            btn.disabled = disabled;
+        });
+    }
+
+    function makeHttpError(status) {
+        const err = new Error();
+        err.status = status;
+        err.isAuthError = status === 401 || status === 403;
+
+        if (err.isAuthError) {
+            err.message = "Your session has expired. Redirecting to login...";
+        } else if (status === 404) {
+            err.message = "Requested device data could not be found.";
+        } else if (status >= 500) {
+            err.message = "A server error occurred. Please try again.";
+        } else {
+            err.message = "Request failed. Please try again.";
+        }
+
+        return err;
+    }
+
+    function handleAuthFailure() {
+        if (authRedirecting) return;
+
+        authRedirecting = true;
+        pollingStopped = true;
+
+        updateControls({ online: false }, false);
+        setSnapshotButtonsDisabled(true);
+        showPageMessage("Your session has expired. Redirecting to login...", "info");
+
+        if (elCmd) {
+            elCmd.textContent = "Please sign in again.";
+        }
+
+        if (elDebug) {
+            elDebug.textContent = "Authentication required.";
+        }
+
+        setTimeout(function () {
+            window.location.href = "/login";
+        }, 1500);
+    }
+
+    async function fetchJson(url, options) {
+        const res = await fetch(url, {
+            credentials: "same-origin",
+            ...(options || {})
+        });
+
+        let data = null;
+        try {
+            data = await res.json();
+        } catch (_) {
+            data = null;
+        }
+
+        if (!res.ok) {
+            throw makeHttpError(res.status);
+        }
+
+        return data;
+    }
 
   async function fetchState() {
     return await fetchJson(
@@ -199,6 +262,7 @@
     async function handleCommand(cmd) {
         try {
             commandBusy = true;
+            clearPageMessage();
             updateControls({ busy: true }, false);
 
             setCmdMessage("Sending '" + cmd + "'...");
@@ -211,11 +275,19 @@
             render(state);
             clearCmdMessageLater();
         } catch (e) {
-            setCmdMessage(String((e && e.message) || e));
+            if (e && e.isAuthError) {
+                handleAuthFailure();
+                return;
+            }
+
+            showPageMessage("Unable to send the command right now.", "error");
+            setCmdMessage("Command failed. Please try again.");
             clearCmdMessageLater();
         } finally {
             commandBusy = false;
-            updateControls(null, true);
+            if (!authRedirecting) {
+                updateControls(null, true);
+            }
         }
     }
 
@@ -266,7 +338,13 @@
           if (statusEl) statusEl.textContent = "Timed out waiting for snapshot.";
         }
       } catch (e) {
-        if (statusEl) statusEl.textContent = String(e.message || e);
+          if (e && e.isAuthError) {
+              handleAuthFailure();
+              return;
+          }
+
+          showPageMessage("Unable to capture a snapshot right now.", "error");
+          if (statusEl) statusEl.textContent = "Snapshot failed. Please try again.";
       } finally {
         btn.disabled = false;
       }
@@ -275,19 +353,31 @@
 
 
     async function loop() {
+        if (pollingStopped) return;
+
         try {
             updateControls(null, true);
 
             const data = await fetchState();
+            clearPageMessage();
             render(data);
         } catch (e) {
-            const message = String((e && e.message) || e);
-            renderStateError(message);
+            if (e && e.isAuthError) {
+                handleAuthFailure();
+                return;
+            }
+
+            showPageMessage("Live device data is temporarily unavailable.", "error");
+
+            if (elDebug) {
+                elDebug.textContent = "State unavailable.";
+            }
+
             updateControls({ online: false }, false);
         } finally {
-            setTimeout(loop, POLL_MS);
+            if (!pollingStopped) {
+                setTimeout(loop, POLL_MS);
+            }
         }
     }
-
-    loop();
 })();
