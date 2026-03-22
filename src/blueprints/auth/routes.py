@@ -1,6 +1,7 @@
 import requests as http_requests
 from flask import Blueprint, render_template, request, redirect, url_for, session, jsonify
 from firebase_admin import auth as firebase_auth
+import re
 
 from config import FIREBASE_WEB_API_KEY
 from extensions import limiter
@@ -10,6 +11,11 @@ auth_bp = Blueprint("auth", __name__)
 
 FIREBASE_SIGN_IN_URL = (
     "https://identitytoolkit.googleapis.com/v1/accounts:signInWithPassword"
+    f"?key={FIREBASE_WEB_API_KEY}"
+)
+
+FIREBASE_SIGN_UP_URL = (
+    "https://identitytoolkit.googleapis.com/v1/accounts:signUp"
     f"?key={FIREBASE_WEB_API_KEY}"
 )
 
@@ -60,6 +66,26 @@ def _start_user_session_from_id_token(id_token: str) -> dict:
 
     return decoded
 
+def _validate_signup_input(email: str, password: str, confirm_password: str) -> str | None:
+    if not email:
+        return "Email is required"
+
+    email_pattern = r"^[^@\s]+@[^@\s]+\.[^@\s]+$"
+    if not re.match(email_pattern, email):
+        return "Invalid email"
+
+    if not password:
+        return "Password is required"
+
+    # Firebase password minimum is 6
+    if len(password) < 6:
+        return "Password must be at least 6 characters"
+
+    if confirm_password != password:
+        return "Passwords do not match"
+
+    return None
+
 # --------------------------------------------------
 # Web form routes
 # --------------------------------------------------
@@ -105,7 +131,7 @@ def login():
 
 
 @auth_bp.route("/signup", methods=["GET", "POST"])
-@limiter.limit("5 per minute")
+@limiter.limit("10 per minute")
 def signup():
     if request.method == "GET":
         return render_template("signup.html", error=None)
@@ -114,23 +140,38 @@ def signup():
         return api_signup()
 
     email = request.form.get("email", "").strip()
-    password = request.form.get("password", "").strip()
+    password = request.form.get("password", "")
+    confirm_password = request.form.get("confirm_password", "")
 
-    if not email or not password:
-        return render_template("signup.html", error="Email and password are required.")
+    validation_error = _validate_signup_input(email, password, confirm_password)
+    if validation_error:
+        return render_template("signup.html", error=validation_error)
 
     try:
-        user = firebase_auth.create_user(email=email, password=password)
+        resp = http_requests.post(
+            FIREBASE_SIGN_UP_URL,
+            json={
+                "email": email,
+                "password": password,
+                "returnSecureToken": True,
+            },
+            timeout=10,
+        )
+    except http_requests.RequestException:
+        return render_template("signup.html", error="Authentication service unavailable.")
 
-        # Create Firestore profile for the new user
-        db.collection("profiles").document(user.uid).set({
-            "email": email,
-            "role": "user",
-        })
+    if resp.status_code != 200:
+        raw = resp.json().get("error", {}).get("message", "Signup failed.")
+        return render_template("signup.html", error=_friendly_error(raw, "Signup failed."))
 
-        return redirect(url_for("auth.login"))
-    except Exception as e:
-        return render_template("signup.html", error=_friendly_error(str(e), "Signup failed."))
+    data = resp.json()
+
+    try:
+        _start_user_session_from_id_token(data["idToken"])
+    except Exception:
+        return render_template("signup.html", error="Authentication failed.")
+
+    return redirect(url_for("dashboard.home"))
 
 
 @auth_bp.route("/logout")
@@ -189,27 +230,42 @@ def api_login():
 
 def api_signup():
     data = request.get_json(silent=True) or {}
-    email = data.get("email")
-    password = data.get("password")
 
-    if not email or not password:
-        return jsonify({"error": "Email and password are required"}), 400
+    email = (data.get("email") or "").strip()
+    password = data.get("password") or ""
+    confirm_password = data.get("confirm_password") or ""
+
+    validation_error = _validate_signup_input(email, password, confirm_password)
+    if validation_error:
+        return jsonify({"error": validation_error}), 400
 
     try:
-        user = firebase_auth.create_user(email=email, password=password)
+        resp = http_requests.post(
+            FIREBASE_SIGN_UP_URL,
+            json={
+                "email": email,
+                "password": password,
+                "returnSecureToken": True,
+            },
+            timeout=10,
+        )
+    except http_requests.RequestException:
+        return jsonify({"error": "Authentication service unavailable"}), 503
 
-        db.collection("profiles").document(user.uid).set({
-            "email": email,
-            "role": "user",
-        })
+    if resp.status_code != 200:
+        raw = resp.json().get("error", {}).get("message", "Signup failed.")
+        return jsonify({"error": _friendly_error(raw, "Signup failed.")}), 400
 
-        return jsonify({"message": "User created successfully", "uid": user.uid}), 201
-    except Exception as e:
-        msg = str(e)
-        if "email-already-exists" in msg:
-            return jsonify({"error": "An account with this email already exists"}), 400
-        if "invalid-email" in msg:
-            return jsonify({"error": "Invalid email address"}), 400
-        if "weak-password" in msg:
-            return jsonify({"error": "Password is too weak"}), 400
-        return jsonify({"error": "Failed to create user"}), 400
+    firebase_data = resp.json()
+
+    try:
+        decoded = _start_user_session_from_id_token(firebase_data["idToken"])
+    except Exception:
+        return jsonify({"error": "Authentication failed"}), 400
+
+    return jsonify({
+        "message": "Signup successful",
+        "username": session["username"],
+        "email": decoded.get("email"),
+        "token": firebase_data["idToken"],
+    }), 201
