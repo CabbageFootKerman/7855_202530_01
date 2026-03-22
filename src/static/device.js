@@ -9,6 +9,10 @@
   const elCmd = document.getElementById("cmdResult");
   const elDebug = document.getElementById("debugBox");
 
+  let commandBusy = false;
+  let lastStateError = "";
+  let clearCmdTimer = null;
+
   const camImgs = {
     0: document.getElementById("cam0"),
     1: document.getElementById("cam1"),
@@ -40,6 +44,86 @@
     return n.toFixed(1) + " g";
   }
 
+    function normalizeDoorState(data) {
+        return (
+            data?.door_state ||
+            data?.doorState ||
+            data?.state ||
+            "--"
+        );
+    }
+
+    function getWeightValue(data) {
+        return (
+            data?.weight_g ??
+            data?.weight ??
+            data?.package_weight_g ??
+            null
+        );
+    }
+
+    function getLastUpdateValue(data) {
+        return (
+            data?.last_update_iso ||
+            data?.updated_at ||
+            data?.timestamp ||
+            data?.last_seen ||
+            null
+        );
+    }
+
+    function getStateError(data) {
+        if (!data) return "";
+        if (data.error) return String(data.error);
+        if (data.device_error) return String(data.device_error);
+        if (data.online === false) return "Device offline";
+        if (data.connected === false) return "Device disconnected";
+        return "";
+    }
+
+    function setCmdMessage(message) {
+        if (!elCmd) return;
+        elCmd.textContent = message || "";
+    }
+
+    function clearCmdMessageLater() {
+        if (clearCmdTimer) {
+            clearTimeout(clearCmdTimer);
+        }
+
+        clearCmdTimer = setTimeout(function () {
+            if (!commandBusy && !lastStateError && elCmd) {
+                elCmd.textContent = "";
+            }
+        }, 3000);
+    }
+
+    function updateControls(data, loading) {
+        const doorState = normalizeDoorState(data).toLowerCase();
+        const offline = data && (data.online === false || data.connected === false);
+        const busy = !!(data && (data.command_pending || data.busy));
+
+        if (btnOpen) {
+            btnOpen.disabled = !!loading || !!offline || !!busy || doorState === "open";
+        }
+
+        if (btnClose) {
+            btnClose.disabled = !!loading || !!offline || !!busy || doorState === "closed";
+        }
+    }
+
+    function renderStateError(message) {
+        lastStateError = message || "";
+
+        if (elDebug && message) {
+            elDebug.textContent = "State load failed: " + message;
+        }
+
+        if (!commandBusy) {
+            setCmdMessage(lastStateError);
+        }
+    }
+
   async function fetchJson(url, options) {
     const res = await fetch(url, {
       credentials: "same-origin",
@@ -67,26 +151,39 @@
       { method: "GET" }
     );
   }
+    function render(data) {
+        const doorState = normalizeDoorState(data);
+        const weightValue = getWeightValue(data);
+        const lastUpdate = getLastUpdateValue(data);
+        const stateError = getStateError(data);
 
-  function render(data) {
-    if (elDoor) {
-      elDoor.textContent = data.door_state || "--";
+        if (elDoor) {
+            elDoor.textContent = doorState;
+        }
+
+        if (elWeight) {
+            elWeight.textContent = formatWeight(weightValue);
+        }
+
+        if (elLast) {
+            elLast.textContent = formatTimestamp(lastUpdate);
+        }
+
+        updateControls(data, false);
+
+        if (stateError) {
+            renderStateError(stateError);
+        } else {
+            lastStateError = "";
+            if (!commandBusy) {
+                setCmdMessage("");
+            }
+        }
+
+        if (elDebug) {
+            elDebug.textContent = JSON.stringify(data, null, 2);
+        }
     }
-
-    if (elWeight) {
-      elWeight.textContent = formatWeight(data.weight_g);
-    }
-
-    if (elLast) {
-      elLast.textContent = formatTimestamp(data.last_update_iso);
-    }
-
-    // Camera images are loaded on-demand via snapshot buttons, not here.
-
-    if (elDebug) {
-      elDebug.textContent = JSON.stringify(data, null, 2);
-    }
-  }
 
   async function sendCommand(cmd) {
     return await fetchJson(
@@ -99,50 +196,28 @@
     );
   }
 
-  async function handleCommand(cmd) {
-    try {
-      if (btnOpen) btnOpen.disabled = true;
-      if (btnClose) btnClose.disabled = true;
+    async function handleCommand(cmd) {
+        try {
+            commandBusy = true;
+            updateControls({ busy: true }, false);
 
-      if (elCmd) {
-        elCmd.textContent = "Sending '" + cmd + "'...";
-      }
+            setCmdMessage("Sending '" + cmd + "'...");
 
-      const result = await sendCommand(cmd);
+            const result = await sendCommand(cmd);
 
-      if (elCmd) {
-        elCmd.textContent = result.message || ("Command '" + cmd + "' sent.");
-      }
+            setCmdMessage(result.message || ("Command '" + cmd + "' sent."));
 
-      const state = await fetchState();
-      render(state);
-    } catch (e) {
-      if (elCmd) {
-        elCmd.textContent = String((e && e.message) || e);
-      }
-    } finally {
-      if (btnOpen) btnOpen.disabled = false;
-      if (btnClose) btnClose.disabled = false;
-
-      setTimeout(function () {
-        if (elCmd) {
-          elCmd.textContent = "";
+            const state = await fetchState();
+            render(state);
+            clearCmdMessageLater();
+        } catch (e) {
+            setCmdMessage(String((e && e.message) || e));
+            clearCmdMessageLater();
+        } finally {
+            commandBusy = false;
+            updateControls(null, true);
         }
-      }, 3000);
     }
-  }
-
-  if (btnOpen) {
-    btnOpen.addEventListener("click", function () {
-      handleCommand("open");
-    });
-  }
-
-  if (btnClose) {
-    btnClose.addEventListener("click", function () {
-      handleCommand("close");
-    });
-  }
 
 
   // - Camera snapshot buttons (request-response via command queue) -
@@ -199,18 +274,20 @@
   });
 
 
-  async function loop() {
-    try {
-      const data = await fetchState();
-      render(data);
-    } catch (e) {
-      if (elDebug) {
-        elDebug.textContent = "State load failed: " + String((e && e.message) || e);
-      }
+    async function loop() {
+        try {
+            updateControls(null, true);
+
+            const data = await fetchState();
+            render(data);
+        } catch (e) {
+            const message = String((e && e.message) || e);
+            renderStateError(message);
+            updateControls({ online: false }, false);
+        } finally {
+            setTimeout(loop, POLL_MS);
+        }
     }
 
-    setTimeout(loop, POLL_MS);
-  }
-
-  loop();
+    loop();
 })();
