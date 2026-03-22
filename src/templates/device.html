@@ -12,7 +12,7 @@
 
         .notif-toolbar {
             display: flex;
-            justify-content: space-between;
+            justify-content: flex-end;
             align-items: center;
             gap: 12px;
             margin: 12px 0;
@@ -199,10 +199,6 @@
     </header>
     <!-- Notification Demo Controls -->
     <div class="notif-toolbar">
-        <div class="notif-left">
-            <button id="checkNotificationsBtn" type="button">Check Notifications</button>
-        </div>
-
         <div class="notif-right">
             <button id="notifBellBtn" type="button" class="notif-bell" aria-label="Notifications" aria-expanded="false">
                 <span class="bell-icon">🔔</span>
@@ -228,60 +224,200 @@
         </div>
     </div>
 
-    <!-- Optional demo buttons (helpful for showing integration quickly) -->
-    <div class="notif-demo-row">
-        <button type="button" class="demo-notify-btn" data-preset="package_detected">
-            Demo: Package Detected
-        </button>
-        <button type="button" class="demo-notify-btn" data-preset="door_left_open">
-            Demo: Door Left Open
-        </button>
-        <button type="button" class="demo-notify-btn" data-preset="device_offline">
-            Demo: Device Offline
-        </button>
-        <button type="button" class="demo-notify-btn" data-preset="video_recorded">
-            Demo: Video Recorded        
-        </button>
-    </div>
-
-    <main class="container">
-        <section class="card">
-            <h2>Status</h2>
-            <div class="status-grid">
-                <div><div class="label">Door</div><div id="doorState" class="value">--</div></div>
-                <div><div class="label">Weight</div><div id="weightValue" class="value">--</div></div>
-                <div><div class="label">Last Update</div><div id="lastUpdate" class="value muted">--</div></div>
+    <main class="container dashboard-shell">
+        <section class="card page-intro">
+            <div class="page-intro-copy">
+                <p class="eyebrow">Device Dashboard</p>
+                <h2>SmartPost control panel</h2>
+                <p class="muted">
+                    View current device status, control the door, capture camera snapshots,
+                    and review recent door activity.
+                </p>
             </div>
-
-            <div class="controls">
-                <button id="btnOpen" class="btn btn-primary" type="button">Open</button>
-                <button id="btnClose" class="btn btn-secondary" type="button">Close</button>
-                <span id="cmdResult" class="muted"></span>
-            </div>
-        </section>
-
-        <section class="card">
-            <h2>Cameras</h2>
-            <div class="cam-grid">
-                <div class="cam-slot">
-                    <img id="cam0" class="cam-img" alt="Camera 0" />
-                    <button class="btn btn-primary snap-btn" data-cam="0" type="button">Snapshot Cam 0</button>
-                    <span id="camStatus0" class="muted"></span>
+            <div class="device-summary">
+                <div class="summary-item">
+                    <span class="label">Device ID</span>
+                    <span class="value value-compact">{{ device_id }}</span>
                 </div>
-                <div class="cam-slot">
-                    <img id="cam1" class="cam-img" alt="Camera 1" />
-                    <button class="btn btn-primary snap-btn" data-cam="1" type="button">Snapshot Cam 1</button>
-                    <span id="camStatus1" class="muted"></span>
-                </div>
-                <div class="cam-slot">
-                    <img id="cam2" class="cam-img" alt="Camera 2" />
-                    <button class="btn btn-primary snap-btn" data-cam="2" type="button">Snapshot Cam 2</button>
-                    <span id="camStatus2" class="muted"></span>
+                <div class="summary-item">
+                    <span class="label">Session</span>
+                    <span class="value value-compact">Active</span>
                 </div>
             </div>
         </section>
-        <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-<script>
+
+        <div class="dashboard-layout">
+            <div class="dashboard-main">
+                <section class="card">
+                    <div class="section-heading">
+                        <div>
+                            <p class="eyebrow">Live Status</p>
+                            <h2>Current device state</h2>
+                        </div>
+                    </div>
+
+                    <div class="status-grid status-grid-enhanced">
+                        <article class="status-tile">
+                            <div class="label">Door state</div>
+                            <div id="doorState" class="value">--</div>
+                        </article>
+
+                        <article class="status-tile">
+                            <div class="label">Package weight</div>
+                            <div id="weightValue" class="value">--</div>
+                        </article>
+
+                        <article class="status-tile">
+                            <div class="label">Last update</div>
+                            <div id="lastUpdate" class="value muted">--</div>
+                        </article>
+                    </div>
+                </section>
+
+                <section class="card">
+                    <div class="section-heading">
+                        <div>
+                            <p class="eyebrow">Controls</p>
+                            <h2>Door controls</h2>
+                        </div>
+                        <p class="muted section-note">
+                            Send commands directly to the device.
+                        </p>
+                    </div>
+
+                    <div class="controls controls-panel">
+                        <button id="btnOpen" class="btn btn-primary" type="button">Open door</button>
+                        <button id="btnClose" class="btn btn-secondary" type="button">Close door</button>
+                    </div>
+
+                    <div class="feedback-row">
+                        <span class="label">Command status</span>
+                        <span id="cmdResult" class="muted"></span>
+                    </div>
+                </section>
+
+                <section class="card">
+                    <div class="section-heading">
+                        <div>
+                            <p class="eyebrow">Analytics</p>
+                            <h2>Door closing events</h2>
+                        </div>
+                        <p class="muted section-note">Last 24 hours</p>
+                    </div>
+
+                    <div class="chart-shell">
+                        <canvas id="doorCloseChart"></canvas>
+                    </div>
+                    <p id="doorCloseTotal" class="muted">Total closes: 0</p>
+                </section>
+
+                <section class="card">
+                    <div class="section-heading">
+                        <div>
+                            <p class="eyebrow">Cameras</p>
+                            <h2>Capture snapshots</h2>
+                        </div>
+                    </div>
+
+                    <div class="cam-grid">
+                        <article class="cam-slot">
+                            <div class="cam-frame">
+                                <img id="cam0" class="cam-img" alt="Camera 0" />
+                            </div>
+                            <div class="cam-actions">
+                                <button class="btn btn-primary snap-btn" data-cam="0" type="button">Snapshot Cam 0</button>
+                                <span id="camStatus0" class="muted"></span>
+                            </div>
+                        </article>
+
+                        <article class="cam-slot">
+                            <div class="cam-frame">
+                                <img id="cam1" class="cam-img" alt="Camera 1" />
+                            </div>
+                            <div class="cam-actions">
+                                <button class="btn btn-primary snap-btn" data-cam="1" type="button">Snapshot Cam 1</button>
+                                <span id="camStatus1" class="muted"></span>
+                            </div>
+                        </article>
+
+                        <article class="cam-slot">
+                            <div class="cam-frame">
+                                <img id="cam2" class="cam-img" alt="Camera 2" />
+                            </div>
+                            <div class="cam-actions">
+                                <button class="btn btn-primary snap-btn" data-cam="2" type="button">Snapshot Cam 2</button>
+                                <span id="camStatus2" class="muted"></span>
+                            </div>
+                        </article>
+                    </div>
+                </section>
+
+                <section class="card">
+                    <div class="section-heading">
+                        <div>
+                            <p class="eyebrow">Media</p>
+                            <h2>Image upload and download</h2>
+                        </div>
+                    </div>
+
+                    <form id="imageUploadForm" class="upload-row">
+                        <input id="imageFile" type="file" accept="image/*" required />
+                        <button type="submit" class="btn btn-primary">Upload image</button>
+                        <span id="imageUploadStatus" class="muted"></span>
+                    </form>
+
+                    <div class="list-toolbar">
+                        <button id="refreshImagesBtn" type="button" class="btn btn-secondary">Refresh available images</button>
+                    </div>
+
+                    <ul id="imageList" class="resource-list"></ul>
+                </section>
+            </div>
+
+            <aside class="dashboard-side">
+                <section class="card">
+                    <div class="section-heading">
+                        <div>
+                            <p class="eyebrow">Summary</p>
+                            <h2>Device information</h2>
+                        </div>
+                    </div>
+
+                    <div class="summary-stack">
+                        <div class="summary-item">
+                            <span class="label">Connected device</span>
+                            <span class="value value-compact">{{ device_id }}</span>
+                        </div>
+                        <div class="summary-item">
+                            <span class="label">Primary actions</span>
+                            <span class="muted">Door control, snapshots, image management</span>
+                        </div>
+                        <div class="summary-item">
+                            <span class="label">Data visibility</span>
+                            <span class="muted">Live device state and recent chart data</span>
+                        </div>
+                    </div>
+                </section>
+
+                <section class="card debug-card">
+                    <div class="section-heading">
+                        <div>
+                            <p class="eyebrow">Debug</p>
+                            <h2>Raw device payload</h2>
+                        </div>
+                    </div>
+                    <pre id="debugBox" class="pre"></pre>
+                </section>
+            </aside>
+        </div>
+    </main>
+
+    <script>
+    window.SMARTPOST_DEVICE_ID = "{{ device_id }}";
+    </script>
+    <script src="{{ url_for('static', filename='device.js') }}"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script>
 (() => {
     const chartDeviceId = window.SMARTPOST_DEVICE_ID || "{{ device_id }}";
     let doorCloseChart = null;
@@ -354,39 +490,7 @@
         setInterval(loadDoorCloseChart, 5000);
     });
 })();
-</script>
-        <section class="card">
-          <h2>Images (Upload / Download)</h2>
-
-          <form id="imageUploadForm">
-            <input id="imageFile" type="file" accept="image/*" required />
-            <button type="submit" class="btn btn-primary">Upload Image</button>
-            <span id="imageUploadStatus" class="muted"></span>
-          </form>
-
-          <div style="margin-top: 12px;">
-            <button id="refreshImagesBtn" type="button">Refresh Available Images</button>
-          </div>
-
-          <ul id="imageList" style="margin-top: 10px;"></ul>
-        </section>
-<section class="card">
-    <h2>Door closing events (last 24 hours)</h2>
-    <div style="height: 320px;">
-        <canvas id="doorCloseChart"></canvas>
-    </div>
-    <p id="doorCloseTotal">Total closes: 0</p>
-</section>
-        <section class="card">
-            <h2>Debug</h2>
-            <pre id="debugBox" class="pre"></pre>
-        </section>
-    </main>
-
-    <script>
-    window.SMARTPOST_DEVICE_ID = "{{ device_id }}";
     </script>
-    <script src="{{ url_for('static', filename='device.js') }}"></script>
     <script>
 (() => {
   // Flask/Jinja device_id from your route: render_template("device.html", device_id=device_id)
@@ -396,7 +500,6 @@
   const NOTIF_POLL_MS = 10000;
 
   // UI elements
-  const checkBtn = document.getElementById("checkNotificationsBtn");
   const bellBtn = document.getElementById("notifBellBtn");
   const badgeEl = document.getElementById("notifBadge");
   const panelEl = document.getElementById("notifPanel");
@@ -405,8 +508,7 @@
   const refreshBtn = document.getElementById("refreshNotificationsBtn");
   const markAllReadBtn = document.getElementById("markAllReadBtn");
   const clearNotificationsBtn = document.getElementById("clearNotificationsBtn");
-  const demoButtons = document.querySelectorAll(".demo-notify-btn");
-
+  
   let isPanelOpen = false;
   let pollHandle = null;
 
@@ -624,22 +726,6 @@
         }
     }
 
-  async function triggerDemoNotification(preset) {
-    try {
-      setStatus(`Generating demo notification: ${preset}...`);
-      await fetchJson(`/api/device/${encodeURIComponent(DEVICE_ID)}/demo-notify`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ preset })
-      });
-      await refreshAll({ openPanel: true });
-      setStatus(`Demo notification generated: ${preset}`);
-    } catch (err) {
-      console.error("Demo notification failed:", err);
-      setStatus(`Demo failed: ${err.message}`);
-    }
-  }
-
   function startPolling() {
     if (pollHandle) return;
     pollHandle = setInterval(() => {
@@ -654,15 +740,6 @@
     if (!pollHandle) return;
     clearInterval(pollHandle);
     pollHandle = null;
-  }
-
-  // Event bindings
-  if (checkBtn) {
-    checkBtn.addEventListener("click", async () => {
-      // "Check Notifications" opens panel + refreshes count/list
-      openPanel();
-      await refreshAll({ openPanel: true });
-    });
   }
 
   if (bellBtn) {
@@ -706,14 +783,6 @@
     });
   }
 
-  // Demo buttons (optional but useful for showcasing)
-  demoButtons.forEach(btn => {
-    btn.addEventListener("click", () => {
-      const preset = btn.getAttribute("data-preset");
-      triggerDemoNotification(preset);
-    });
-  });
-
   // Close panel when clicking outside
   document.addEventListener("click", (e) => {
     if (!isPanelOpen) return;
@@ -740,7 +809,6 @@
     refreshAll,
     openPanel,
     closePanel,
-    triggerDemoNotification,
     stopPolling,
     startPolling
   };
