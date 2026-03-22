@@ -186,6 +186,25 @@
             flex-wrap: wrap;
             margin: 8px 0 14px;
         }
+
+        .page-message {
+            margin: 12px 20px 0;
+            padding: 12px 14px;
+            border-radius: 10px;
+            border: 1px solid #d6d6d6;
+            background: #f8fafc;
+            color: #1f2937;
+        }
+
+        .page-message.info {
+            border-color: #bfd7ff;
+            background: #eef5ff;
+        }
+
+        .page-message.error {
+            border-color: #f0b7b7;
+            background: #fff1f1;
+        }
     </style>
 
 </head>
@@ -197,7 +216,7 @@
             <a class="link" href="{{ url_for('auth.logout') }}">Logout</a>
         </div>
     </header>
-    <!-- Notification Demo Controls -->
+    <!-- Notification Controls -->
     <div class="notif-toolbar">
         <div class="notif-right">
             <button id="notifBellBtn" type="button" class="notif-bell" aria-label="Notifications" aria-expanded="false">
@@ -223,6 +242,8 @@
             </div>
         </div>
     </div>
+
+    <div id="pageMessage" class="page-message hidden" role="alert" aria-live="polite"></div>
 
     <main class="container dashboard-shell">
         <section class="card page-intro">
@@ -508,7 +529,7 @@
   const refreshBtn = document.getElementById("refreshNotificationsBtn");
   const markAllReadBtn = document.getElementById("markAllReadBtn");
   const clearNotificationsBtn = document.getElementById("clearNotificationsBtn");
-  
+
   let isPanelOpen = false;
   let pollHandle = null;
 
