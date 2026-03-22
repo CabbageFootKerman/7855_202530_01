@@ -8,6 +8,11 @@
   const elLast = document.getElementById("lastUpdate");
   const elCmd = document.getElementById("cmdResult");
   const elDebug = document.getElementById("debugBox");
+  const elPageMessage = document.getElementById("pageMessage");
+
+  let commandBusy = false;
+  let lastStateError = "";
+  let clearCmdTimer = null;
 
   const camImgs = {
     0: document.getElementById("cam0"),
@@ -19,6 +24,8 @@
   const btnClose = document.getElementById("btnClose");
 
   const POLL_MS = 1000;
+  let authRedirecting = false;
+  let pollingStopped = false;
 
   function cacheBust(url) {
     if (!url) return "";
@@ -40,26 +47,166 @@
     return n.toFixed(1) + " g";
   }
 
-  async function fetchJson(url, options) {
-    const res = await fetch(url, {
-      credentials: "same-origin",
-      ...(options || {})
-    });
-
-    let data = null;
-    try {
-      data = await res.json();
-    } catch (_) {
-      data = null;
+    function normalizeDoorState(data) {
+        return (
+            data?.door_state ||
+            data?.doorState ||
+            data?.state ||
+            "--"
+        );
     }
 
-    if (!res.ok) {
-      const msg = data && data.error ? data.error : "HTTP " + res.status;
-      throw new Error(msg);
+    function getWeightValue(data) {
+        return (
+            data?.weight_g ??
+            data?.weight ??
+            data?.package_weight_g ??
+            null
+        );
     }
 
-    return data;
-  }
+    function getLastUpdateValue(data) {
+        return (
+            data?.last_update_iso ||
+            data?.updated_at ||
+            data?.timestamp ||
+            data?.last_seen ||
+            null
+        );
+    }
+
+    function getStateError(data) {
+        if (!data) return "";
+        if (data.error) return String(data.error);
+        if (data.device_error) return String(data.device_error);
+        if (data.online === false) return "Device offline";
+        if (data.connected === false) return "Device disconnected";
+        return "";
+    }
+
+    function setCmdMessage(message) {
+        if (!elCmd) return;
+        elCmd.textContent = message || "";
+    }
+
+    function clearCmdMessageLater() {
+        if (clearCmdTimer) {
+            clearTimeout(clearCmdTimer);
+        }
+
+        clearCmdTimer = setTimeout(function () {
+            if (!commandBusy && !lastStateError && elCmd) {
+                elCmd.textContent = "";
+            }
+        }, 3000);
+    }
+
+    function updateControls(data, loading) {
+        const doorState = normalizeDoorState(data).toLowerCase();
+        const offline = data && (data.online === false || data.connected === false);
+        const busy = !!(data && (data.command_pending || data.busy));
+
+        if (btnOpen) {
+            btnOpen.disabled = !!loading || !!offline || !!busy || doorState === "open";
+        }
+
+        if (btnClose) {
+            btnClose.disabled = !!loading || !!offline || !!busy || doorState === "closed";
+        }
+    }
+
+    function renderStateError(message) {
+        lastStateError = message || "";
+
+        if (elDebug && message) {
+            elDebug.textContent = "State load failed: " + message;
+        }
+
+        if (!commandBusy) {
+            setCmdMessage(lastStateError);
+        }
+    }
+
+    function showPageMessage(message, level) {
+        if (!elPageMessage) return;
+        elPageMessage.textContent = message || "";
+        elPageMessage.classList.remove("hidden", "info", "error");
+        elPageMessage.classList.add(level === "info" ? "info" : "error");
+    }
+
+    function clearPageMessage() {
+        if (!elPageMessage) return;
+        elPageMessage.textContent = "";
+        elPageMessage.classList.add("hidden");
+        elPageMessage.classList.remove("info", "error");
+    }
+
+    function setSnapshotButtonsDisabled(disabled) {
+        document.querySelectorAll(".snap-btn").forEach(function (btn) {
+            btn.disabled = disabled;
+        });
+    }
+
+    function makeHttpError(status) {
+        const err = new Error();
+        err.status = status;
+        err.isAuthError = status === 401 || status === 403;
+
+        if (err.isAuthError) {
+            err.message = "Your session has expired. Redirecting to login...";
+        } else if (status === 404) {
+            err.message = "Requested device data could not be found.";
+        } else if (status >= 500) {
+            err.message = "A server error occurred. Please try again.";
+        } else {
+            err.message = "Request failed. Please try again.";
+        }
+
+        return err;
+    }
+
+    function handleAuthFailure() {
+        if (authRedirecting) return;
+
+        authRedirecting = true;
+        pollingStopped = true;
+
+        updateControls({ online: false }, false);
+        setSnapshotButtonsDisabled(true);
+        showPageMessage("Your session has expired. Redirecting to login...", "info");
+
+        if (elCmd) {
+            elCmd.textContent = "Please sign in again.";
+        }
+
+        if (elDebug) {
+            elDebug.textContent = "Authentication required.";
+        }
+
+        setTimeout(function () {
+            window.location.href = "/login";
+        }, 1500);
+    }
+
+    async function fetchJson(url, options) {
+        const res = await fetch(url, {
+            credentials: "same-origin",
+            ...(options || {})
+        });
+
+        let data = null;
+        try {
+            data = await res.json();
+        } catch (_) {
+            data = null;
+        }
+
+        if (!res.ok) {
+            throw makeHttpError(res.status);
+        }
+
+        return data;
+    }
 
   async function fetchState() {
     return await fetchJson(
@@ -67,26 +214,39 @@
       { method: "GET" }
     );
   }
+    function render(data) {
+        const doorState = normalizeDoorState(data);
+        const weightValue = getWeightValue(data);
+        const lastUpdate = getLastUpdateValue(data);
+        const stateError = getStateError(data);
 
-  function render(data) {
-    if (elDoor) {
-      elDoor.textContent = data.door_state || "--";
+        if (elDoor) {
+            elDoor.textContent = doorState;
+        }
+
+        if (elWeight) {
+            elWeight.textContent = formatWeight(weightValue);
+        }
+
+        if (elLast) {
+            elLast.textContent = formatTimestamp(lastUpdate);
+        }
+
+        updateControls(data, false);
+
+        if (stateError) {
+            renderStateError(stateError);
+        } else {
+            lastStateError = "";
+            if (!commandBusy) {
+                setCmdMessage("");
+            }
+        }
+
+        if (elDebug) {
+            elDebug.textContent = JSON.stringify(data, null, 2);
+        }
     }
-
-    if (elWeight) {
-      elWeight.textContent = formatWeight(data.weight_g);
-    }
-
-    if (elLast) {
-      elLast.textContent = formatTimestamp(data.last_update_iso);
-    }
-
-    // Camera images are loaded on-demand via snapshot buttons, not here.
-
-    if (elDebug) {
-      elDebug.textContent = JSON.stringify(data, null, 2);
-    }
-  }
 
   async function sendCommand(cmd) {
     return await fetchJson(
@@ -99,50 +259,37 @@
     );
   }
 
-  async function handleCommand(cmd) {
-    try {
-      if (btnOpen) btnOpen.disabled = true;
-      if (btnClose) btnClose.disabled = true;
+    async function handleCommand(cmd) {
+        try {
+            commandBusy = true;
+            clearPageMessage();
+            updateControls({ busy: true }, false);
 
-      if (elCmd) {
-        elCmd.textContent = "Sending '" + cmd + "'...";
-      }
+            setCmdMessage("Sending '" + cmd + "'...");
 
-      const result = await sendCommand(cmd);
+            const result = await sendCommand(cmd);
 
-      if (elCmd) {
-        elCmd.textContent = result.message || ("Command '" + cmd + "' sent.");
-      }
+            setCmdMessage(result.message || ("Command '" + cmd + "' sent."));
 
-      const state = await fetchState();
-      render(state);
-    } catch (e) {
-      if (elCmd) {
-        elCmd.textContent = String((e && e.message) || e);
-      }
-    } finally {
-      if (btnOpen) btnOpen.disabled = false;
-      if (btnClose) btnClose.disabled = false;
+            const state = await fetchState();
+            render(state);
+            clearCmdMessageLater();
+        } catch (e) {
+            if (e && e.isAuthError) {
+                handleAuthFailure();
+                return;
+            }
 
-      setTimeout(function () {
-        if (elCmd) {
-          elCmd.textContent = "";
+            showPageMessage("Unable to send the command right now.", "error");
+            setCmdMessage("Command failed. Please try again.");
+            clearCmdMessageLater();
+        } finally {
+            commandBusy = false;
+            if (!authRedirecting) {
+                updateControls(null, true);
+            }
         }
-      }, 3000);
     }
-  }
-
-  if (btnOpen) {
-    btnOpen.addEventListener("click", function () {
-      handleCommand("open");
-    });
-  }
-
-  if (btnClose) {
-    btnClose.addEventListener("click", function () {
-      handleCommand("close");
-    });
-  }
 
 
   // - Camera snapshot buttons (request-response via command queue) -
@@ -191,7 +338,13 @@
           if (statusEl) statusEl.textContent = "Timed out waiting for snapshot.";
         }
       } catch (e) {
-        if (statusEl) statusEl.textContent = String(e.message || e);
+          if (e && e.isAuthError) {
+              handleAuthFailure();
+              return;
+          }
+
+          showPageMessage("Unable to capture a snapshot right now.", "error");
+          if (statusEl) statusEl.textContent = "Snapshot failed. Please try again.";
       } finally {
         btn.disabled = false;
       }
@@ -199,18 +352,32 @@
   });
 
 
-  async function loop() {
-    try {
-      const data = await fetchState();
-      render(data);
-    } catch (e) {
-      if (elDebug) {
-        elDebug.textContent = "State load failed: " + String((e && e.message) || e);
-      }
+    async function loop() {
+        if (pollingStopped) return;
+
+        try {
+            updateControls(null, true);
+
+            const data = await fetchState();
+            clearPageMessage();
+            render(data);
+        } catch (e) {
+            if (e && e.isAuthError) {
+                handleAuthFailure();
+                return;
+            }
+
+            showPageMessage("Live device data is temporarily unavailable.", "error");
+
+            if (elDebug) {
+                elDebug.textContent = "State unavailable.";
+            }
+
+            updateControls({ online: false }, false);
+        } finally {
+            if (!pollingStopped) {
+                setTimeout(loop, POLL_MS);
+            }
+        }
     }
-
-    setTimeout(loop, POLL_MS);
-  }
-
-  loop();
 })();
