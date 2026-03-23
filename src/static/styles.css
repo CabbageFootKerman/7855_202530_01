@@ -16,3 +16,150 @@ body { font-family: Arial, sans-serif; margin: 0; background: #f5f6f8; }
 .link { color:#ddd; text-decoration:none; margin-left:12px; }
 .muted { color:#666; }
 .pre { background:#0b1020; color:#e5e7eb; padding:10px; border-radius:8px; overflow:auto; }
+.dashboard-shell {
+    gap: 18px;
+}
+
+.page-intro {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: 24px;
+    flex-wrap: wrap;
+}
+
+    .page-intro h2,
+    .section-heading h2 {
+        margin: 4px 0 0;
+    }
+
+.eyebrow {
+    margin: 0;
+    font-size: 12px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: #2563eb;
+}
+
+.dashboard-layout {
+    display: grid;
+    grid-template-columns: minmax(0, 2.2fr) minmax(280px, 0.9fr);
+    gap: 16px;
+    align-items: start;
+}
+
+.dashboard-main,
+.dashboard-side {
+    display: grid;
+    gap: 16px;
+}
+
+.section-heading {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: 16px;
+    margin-bottom: 14px;
+}
+
+.section-note {
+    max-width: 280px;
+    text-align: right;
+}
+
+.status-grid-enhanced {
+    gap: 14px;
+}
+
+.status-tile,
+.summary-item {
+    border: 1px solid #e5e7eb;
+    border-radius: 12px;
+    padding: 14px;
+    background: #f8fafc;
+}
+
+.value-compact {
+    font-size: 15px;
+    word-break: break-word;
+}
+
+.controls-panel {
+    flex-wrap: wrap;
+    margin-bottom: 12px;
+}
+
+.feedback-row {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    padding-top: 8px;
+    border-top: 1px solid #e5e7eb;
+}
+
+.chart-shell {
+    height: 320px;
+}
+
+.cam-frame {
+    border-radius: 12px;
+    overflow: hidden;
+    background: #0f172a;
+    min-height: 220px;
+}
+
+.cam-actions {
+    display: grid;
+    gap: 8px;
+    width: 100%;
+}
+
+.upload-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    align-items: center;
+}
+
+.list-toolbar {
+    margin-top: 12px;
+}
+
+.resource-list {
+    margin-top: 12px;
+    padding-left: 18px;
+}
+
+.summary-stack {
+    display: grid;
+    gap: 12px;
+}
+
+.debug-card .pre {
+    max-height: 420px;
+}
+
+@media (max-width: 960px) {
+    .dashboard-layout {
+        grid-template-columns: 1fr;
+    }
+
+    .dashboard-side {
+        order: -1;
+    }
+
+    .cam-grid,
+    .status-grid {
+        grid-template-columns: 1fr;
+    }
+
+    .section-heading {
+        flex-direction: column;
+    }
+
+    .section-note {
+        text-align: left;
+        max-width: none;
+    }
+}

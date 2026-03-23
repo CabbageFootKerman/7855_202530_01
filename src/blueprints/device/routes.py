@@ -87,7 +87,6 @@ def api_device_state(username, device_id):
     }), 200
 
 
-
 @device_bp.route("/api/device/<device_id>/telemetry", methods=["POST"])
 def api_device_telemetry(device_id):
     auth_error = require_device_api_key(device_id)
@@ -124,7 +123,6 @@ def api_device_telemetry(device_id):
     return jsonify({"message": "Telemetry received."}), 200
 
 
-
 @device_bp.route("/api/device/<device_id>/command", methods=["POST"])
 @api_login_required
 def api_device_command(username, device_id):
@@ -147,14 +145,15 @@ def api_device_command(username, device_id):
         "created_by": username,
     }
 
-    # For capture commands, include which camera to capture
     if cmd == "capture":
         try:
             camera_id = int(data.get("camera_id", -1))
         except (TypeError, ValueError):
             return jsonify({"error": "camera_id must be an integer."}), 400
+
         if camera_id not in (0, 1, 2):
             return jsonify({"error": "camera_id must be 0, 1, or 2."}), 400
+
         queued_item["camera_id"] = camera_id
 
     with DEVICE_LOCK:
@@ -175,6 +174,22 @@ def api_device_command(username, device_id):
             severity="info",
             data={"command": cmd, "source": "api_device_command"},
         )
+
+        if cmd == "close":
+            publish_device_notification(
+                actor_username=username,
+                device_id=device_id,
+                notif_type="door_close_requested",
+                title="Door close requested",
+                body=f"{username} requested door close on device {device_id}.",
+                severity="info",
+                data={
+                    "command": "close",
+                    "source": "ui",
+                    "event": "door_close_requested",
+                },
+            )
+
     except Exception as e:
         current_app.logger.exception("Notification publish failed: %s", e)
 
@@ -182,7 +197,6 @@ def api_device_command(username, device_id):
         "message": f"Command '{cmd}' queued for {device_id}.",
         "notification": notif_result,
     }), 200
-
 
 
 @device_bp.route("/api/device/<device_id>/command/next", methods=["GET"])
