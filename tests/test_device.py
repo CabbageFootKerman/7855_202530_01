@@ -2,7 +2,7 @@
 Tests for device endpoints and API key authentication.
 
 Covers:
-- api_key_required decorator (via telemetry and command/next endpoints)
+- require_device_api_key decorator (via telemetry and command/next endpoints)
 - GET /api/device/<device_id>/state (session auth)
 - POST /api/device/<device_id>/telemetry (device API key auth)
 - POST /api/device/<device_id>/command (session auth)
@@ -17,12 +17,14 @@ API_KEY = "test-sensor-key"
 
 
 # ---------------------------------------------------------------------------
-# Helpers
+# Helper: inject a logged-in session directly (no JWT needed)
 # ---------------------------------------------------------------------------
 
-def auth_headers():
-    """Session-authenticated headers (uses mock_firebase_auth fixture)."""
-    return {"Authorization": "Bearer validtoken"}
+def set_logged_in(client):
+    """Push a valid session into the test client so api_login_required passes."""
+    with client.session_transaction() as sess:
+        sess["logged_in"] = True
+        sess["username"] = "test_user_123"
 
 
 def device_headers():
@@ -31,7 +33,7 @@ def device_headers():
 
 
 # ---------------------------------------------------------------------------
-# API key decorator — missing / wrong / valid key
+# require_device_api_key decorator — missing / wrong / valid key
 # ---------------------------------------------------------------------------
 
 def test_telemetry_no_api_key(client):
@@ -98,26 +100,22 @@ def test_device_state_no_auth(client):
     assert response.status_code == 401
 
 
-def test_device_state_success(client, mock_firebase_auth):
+def test_device_state_success(client):
     """Authenticated user with device access gets state."""
+    set_logged_in(client)
     with patch("blueprints.device.routes.user_can_access_device", return_value=True):
-        response = client.get(
-            f"/api/device/{DEVICE_ID}/state",
-            headers=auth_headers(),
-        )
+        response = client.get(f"/api/device/{DEVICE_ID}/state")
     assert response.status_code == 200
     data = response.get_json()
     assert data["device_id"] == DEVICE_ID
     assert "door_state" in data
 
 
-def test_device_state_forbidden(client, mock_firebase_auth):
+def test_device_state_forbidden(client):
     """Authenticated user without device access gets 403."""
+    set_logged_in(client)
     with patch("blueprints.device.routes.user_can_access_device", return_value=False):
-        response = client.get(
-            f"/api/device/{DEVICE_ID}/state",
-            headers=auth_headers(),
-        )
+        response = client.get(f"/api/device/{DEVICE_ID}/state")
     assert response.status_code == 403
 
 
@@ -134,38 +132,38 @@ def test_command_no_auth(client):
     assert response.status_code == 401
 
 
-def test_command_invalid_payload(client, mock_firebase_auth):
+def test_command_invalid_payload(client):
     """Invalid command value returns 400."""
+    set_logged_in(client)
     with patch("blueprints.device.routes.user_can_access_device", return_value=True):
         response = client.post(
             f"/api/device/{DEVICE_ID}/command",
             json={"command": "explode"},
-            headers=auth_headers(),
         )
     assert response.status_code == 400
 
 
-def test_command_open_success(client, mock_firebase_auth):
+def test_command_open_success(client):
     """Valid 'open' command returns 200."""
+    set_logged_in(client)
     with patch("blueprints.device.routes.user_can_access_device", return_value=True), \
          patch("blueprints.device.routes.publish_device_notification", return_value=None):
         response = client.post(
             f"/api/device/{DEVICE_ID}/command",
             json={"command": "open"},
-            headers=auth_headers(),
         )
     assert response.status_code == 200
     assert "open" in response.get_json()["message"]
 
 
-def test_command_close_success(client, mock_firebase_auth):
+def test_command_close_success(client):
     """Valid 'close' command returns 200."""
+    set_logged_in(client)
     with patch("blueprints.device.routes.user_can_access_device", return_value=True), \
          patch("blueprints.device.routes.publish_device_notification", return_value=None):
         response = client.post(
             f"/api/device/{DEVICE_ID}/command",
             json={"command": "close"},
-            headers=auth_headers(),
         )
     assert response.status_code == 200
 
@@ -190,7 +188,17 @@ def test_command_next_wrong_api_key(client):
 
 
 def test_command_next_valid_key_empty_queue(client):
-    """Valid key with empty queue returns 200 with null command."""
+    """Valid key returns 200 with null command once queue is drained."""
+    # Drain any commands left in the queue from previous tests
+    # (DEVICE_COMMANDS is module-level state that persists across tests)
+    for _ in range(10):
+        r = client.get(
+            f"/api/device/{DEVICE_ID}/command/next",
+            headers=device_headers(),
+        )
+        if r.get_json().get("command") is None:
+            break
+
     response = client.get(
         f"/api/device/{DEVICE_ID}/command/next",
         headers=device_headers(),
