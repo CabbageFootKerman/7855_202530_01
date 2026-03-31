@@ -317,7 +317,7 @@
     return null;
   }
 
-  document.querySelectorAll(".snap-btn").forEach(function (btn) {
+    document.querySelectorAll(".snap-btn").forEach(function (btn) {
     btn.addEventListener("click", async function () {
       var camId = btn.getAttribute("data-cam");
       var statusEl = document.getElementById("camStatus" + camId);
@@ -338,13 +338,13 @@
           if (statusEl) statusEl.textContent = "Timed out waiting for snapshot.";
         }
       } catch (e) {
-          if (e && e.isAuthError) {
-              handleAuthFailure();
-              return;
-          }
+        if (e && e.isAuthError) {
+          handleAuthFailure();
+          return;
+        }
 
-          showPageMessage("Unable to capture a snapshot right now.", "error");
-          if (statusEl) statusEl.textContent = "Snapshot failed. Please try again.";
+        showPageMessage("Unable to capture a snapshot right now.", "error");
+        if (statusEl) statusEl.textContent = "Snapshot failed. Please try again.";
       } finally {
         btn.disabled = false;
       }
@@ -352,7 +352,8 @@
   });
 
 
-    async function loop() {
+
+        async function loop() {
         if (pollingStopped) return;
 
         try {
@@ -380,4 +381,18 @@
             }
         }
     }
+
+    if (btnOpen) {
+        btnOpen.addEventListener("click", function () {
+            handleCommand("open");
+        });
+    }
+
+    if (btnClose) {
+        btnClose.addEventListener("click", function () {
+            handleCommand("close");
+        });
+    }
+
+    loop();
 })();
