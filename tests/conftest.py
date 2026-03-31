@@ -72,3 +72,8 @@ def mock_firebase_auth(monkeypatch):
     verify_mock = MagicMock(return_value={"uid": "test_user_123"})
     monkeypatch.setattr("decorators.auth.auth.verify_id_token", verify_mock)
     return verify_mock
+
+@pytest.fixture(autouse=True)
+def force_test_device_key(monkeypatch):
+    monkeypatch.setattr("utils.auth.SENSOR_API_KEY", "test-sensor-key", raising=False)
+    monkeypatch.setenv("SMARTPOST_PI_API_KEY", "test-sensor-key")
