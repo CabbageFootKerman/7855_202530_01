@@ -4,8 +4,8 @@ from firebase_admin import firestore
 
 # --- Interactive device provisioning ---
 
-device_id = input("Device ID [smartpost-pi-01]: ").strip() or "smartpost-pi-01"
-display_name = input("Display name [SmartPost Main Unit]: ").strip() or "SmartPost Main Unit"
+device_id = input("Device ID [smartpost-pi-1000]: ").strip() or "smartpost-pi-1000"
+display_name = input("Display name [smartpost-pi-1000]: ").strip() or "smartpost-pi-1000"
 
 generated_code = secrets.token_hex(4).upper()  # e.g. "A3F1B90C"
 claim_code = input(f"Claim code [{generated_code}]: ").strip() or generated_code
