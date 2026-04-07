@@ -55,7 +55,9 @@ def api_notifications_unread_count(username):
         .where("read", "==", False)
     )
 
-    count = sum(1 for _ in q.stream())
+    # Use server-side count aggregation to avoid streaming every document.
+    result = q.count().get()
+    count = result[0][0].value
 
     return jsonify({
         "username": username,
@@ -253,7 +255,11 @@ def api_device_door_close_chart(username, device_id):
         buckets[label] = 0
         current += timedelta(hours=1)
 
-    q = db.collection("notification_events").where("device_id", "==", device_id)
+    q = (
+        db.collection("notification_events")
+        .where("device_id", "==", device_id)
+        .where("logged_at", ">=", start)
+    )
     docs = list(q.stream())
 
     for doc in docs:

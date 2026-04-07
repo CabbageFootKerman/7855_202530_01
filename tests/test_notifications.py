@@ -105,7 +105,11 @@ def test_notifications_unread_count_success(client):
             .collection.return_value
         )
         filtered = notifications.where.return_value
-        filtered.stream.return_value = [make_doc(), make_doc(), make_doc()]
+
+        # Mock the count() aggregation: result[0][0].value == 3
+        count_row = MagicMock()
+        count_row.value = 3
+        filtered.count.return_value.get.return_value = [[count_row]]
 
         response = client.get("/api/notifications/unread-count")
 
@@ -397,7 +401,8 @@ def test_door_close_chart_success_counts_supported_events(client):
         "blueprints.notifications.routes.user_can_access_device",
         return_value=True,
     ), patch("blueprints.notifications.routes.db") as mock_db:
-        query = mock_db.collection.return_value.where.return_value
+        # Two chained .where() calls are now used: .where(device_id).where(logged_at)
+        query = mock_db.collection.return_value.where.return_value.where.return_value
         query.stream.return_value = docs
 
         response = client.get("/api/device/device-001/door-close-chart?hours=24")

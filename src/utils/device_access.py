@@ -1,28 +1,64 @@
+import time
+import itertools
+from threading import Lock
+
 from firebase import db
 from firebase_admin import firestore
 
+# ---------------------------------------------------------------------------
+# Simple in-process TTL cache for device documents.
+# Avoids a Firestore read on every state-poll access-check (which runs every
+# few seconds).  Cache entries expire after _DEVICE_CACHE_TTL seconds so
+# ownership/permission changes still propagate in a reasonable time.
+# time.monotonic() is used for expiry comparisons because it is immune to
+# system clock adjustments; the TTL is expressed in relative seconds so
+# monotonic time is the correct choice here.
+# ---------------------------------------------------------------------------
+_DEVICE_CACHE_TTL = 60  # seconds
+_device_cache: dict = {}  # device_id -> (data_or_None, expiry_timestamp)
+_device_cache_lock = Lock()
+
+
+def _invalidate_device_cache(device_id: str) -> None:
+    with _device_cache_lock:
+        _device_cache.pop(device_id, None)
+
 
 def get_device(device_id):
+    now = time.monotonic()
+    with _device_cache_lock:
+        cached = _device_cache.get(device_id)
+        if cached is not None:
+            data, expiry = cached
+            if now < expiry:
+                return data
+
     doc = db.collection("devices").document(device_id).get()
     if not doc.exists:
-        return None
-    data = doc.to_dict() or {}
-    data["id"] = doc.id
-    return data
+        result = None
+    else:
+        result = doc.to_dict() or {}
+        result["id"] = doc.id
+
+    with _device_cache_lock:
+        _device_cache[device_id] = (result, now + _DEVICE_CACHE_TTL)
+    return result
 
 
 def get_user_devices(username):
-    docs = db.collection("devices").stream()
+    # Use two targeted index-backed queries instead of a full collection scan.
+    owner_docs = db.collection("devices").where("owner_username", "==", username).stream()
+    allowed_docs = db.collection("devices").where("allowed_users", "array_contains", username).stream()
 
+    seen: set = set()
     devices = []
-    for doc in docs:
+    for doc in itertools.chain(owner_docs, allowed_docs):
+        if doc.id in seen:
+            continue
+        seen.add(doc.id)
         data = doc.to_dict() or {}
-        owner = data.get("owner_username")
-        allowed = data.get("allowed_users", [])
-
-        if owner == username or username in allowed:
-            data["id"] = doc.id
-            devices.append(data)
+        data["id"] = doc.id
+        devices.append(data)
 
     return devices
 
@@ -67,6 +103,7 @@ def claim_device(username, device_id, claim_code):
         "paired_at": firestore.SERVER_TIMESTAMP,
         "is_claimed": True
     })
+    _invalidate_device_cache(device_id)
     return True, "Device claimed."
 
 
@@ -91,6 +128,7 @@ def add_allowed_user(owner_username, device_id, target_username):
     ref.update({
         "allowed_users": firestore.ArrayUnion([target_username])
     })
+    _invalidate_device_cache(device_id)
     return True, "User added."
 
 
@@ -112,4 +150,5 @@ def remove_allowed_user(owner_username, device_id, target_username):
     ref.update({
         "allowed_users": firestore.ArrayRemove([target_username])
     })
+    _invalidate_device_cache(device_id)
     return True, "User removed."
