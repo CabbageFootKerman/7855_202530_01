@@ -85,6 +85,12 @@ class FirestoreUserInboxChannel(NotificationChannel):
 
             writes += 1
 
+        # Invalidate the in-memory notification cache for every recipient so the
+        # next poll reflects the newly written notification.
+        from utils.notification_cache import invalidate_notification_cache
+        for username in recipients:
+            invalidate_notification_cache(username)
+
         return {"channel": self.name, "status": "ok", "writes": writes}
 
 

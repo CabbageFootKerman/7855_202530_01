@@ -18,6 +18,15 @@ _DEVICE_CACHE_TTL = 60  # seconds
 _device_cache: dict = {}  # device_id -> (data_or_None, expiry_timestamp)
 _device_cache_lock = Lock()
 
+# ---------------------------------------------------------------------------
+# Cache for the device list returned to a given user.
+# The /devices dashboard calls get_user_devices() on every page load; caching
+# reduces two Firestore queries to zero for the duration of the TTL.
+# ---------------------------------------------------------------------------
+_USER_DEVICES_CACHE_TTL = 60  # seconds
+_user_devices_cache: dict = {}  # username -> (devices: list, expiry: float)
+_user_devices_lock = Lock()
+
 
 def _invalidate_device_cache(device_id: str) -> None:
     with _device_cache_lock:
@@ -45,20 +54,38 @@ def get_device(device_id):
     return result
 
 
+def _invalidate_user_devices_cache(*usernames: str) -> None:
+    with _user_devices_lock:
+        for username in usernames:
+            _user_devices_cache.pop(username, None)
+
+
 def get_user_devices(username):
-    # Use two targeted index-backed queries instead of a full collection scan.
+    now = time.monotonic()
+    with _user_devices_lock:
+        cached = _user_devices_cache.get(username)
+        if cached is not None:
+            devices, expiry = cached
+            if now < expiry:
+                return devices
+
+    # Cache miss: use two targeted index-backed queries instead of a full
+    # collection scan.
     owner_docs = db.collection("devices").where("owner_username", "==", username).stream()
     allowed_docs = db.collection("devices").where("allowed_users", "array_contains", username).stream()
 
-    seen: set = set()
+    seen_device_ids: set = set()
     devices = []
     for doc in itertools.chain(owner_docs, allowed_docs):
-        if doc.id in seen:
+        if doc.id in seen_device_ids:
             continue
-        seen.add(doc.id)
+        seen_device_ids.add(doc.id)
         data = doc.to_dict() or {}
         data["id"] = doc.id
         devices.append(data)
+
+    with _user_devices_lock:
+        _user_devices_cache[username] = (devices, now + _USER_DEVICES_CACHE_TTL)
 
     return devices
 
@@ -104,6 +131,7 @@ def claim_device(username, device_id, claim_code):
         "is_claimed": True
     })
     _invalidate_device_cache(device_id)
+    _invalidate_user_devices_cache(username)
     return True, "Device claimed."
 
 
@@ -129,6 +157,7 @@ def add_allowed_user(owner_username, device_id, target_username):
         "allowed_users": firestore.ArrayUnion([target_username])
     })
     _invalidate_device_cache(device_id)
+    _invalidate_user_devices_cache(owner_username, target_username)
     return True, "User added."
 
 
@@ -151,4 +180,5 @@ def remove_allowed_user(owner_username, device_id, target_username):
         "allowed_users": firestore.ArrayRemove([target_username])
     })
     _invalidate_device_cache(device_id)
+    _invalidate_user_devices_cache(owner_username, target_username)
     return True, "User removed."

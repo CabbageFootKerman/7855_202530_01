@@ -39,6 +39,7 @@ def test_notifications_list_success(client):
         limited = MagicMock()
 
         notifications.order_by.return_value = ordered
+        # The endpoint always fetches up to 100 to populate the cache.
         ordered.limit.return_value = limited
         limited.stream.return_value = docs
 
@@ -52,6 +53,8 @@ def test_notifications_list_success(client):
         {"id": "n1", "title": "First"},
         {"id": "n2", "title": "Second"},
     ]
+    # Confirm the endpoint always fetches 100 from Firestore to maximise cache hits.
+    ordered.limit.assert_called_once_with(100)
 
 
 def test_notifications_list_invalid_limit_returns_400(client):
@@ -66,33 +69,45 @@ def test_notifications_list_invalid_limit_returns_400(client):
 def test_notifications_list_unread_only_filters_and_clamps_limit(client):
     set_logged_in(client)
 
-    docs = [make_doc(doc_id="n1")]
+    # Provide one unread and one read doc so the in-memory filter is exercised.
+    docs = [
+        make_doc(doc_id="n1", data={"read": False}),
+        make_doc(doc_id="n2", data={"read": True}),
+    ]
 
     with patch("blueprints.notifications.routes.db") as mock_db, \
          patch(
              "blueprints.notifications.routes._serialize_doc",
-             return_value={"id": "n1", "read": False},
+             side_effect=[
+                 {"id": "n1", "read": False},
+                 {"id": "n2", "read": True},
+             ],
          ):
         notifications = (
             mock_db.collection.return_value
             .document.return_value
             .collection.return_value
         )
-        filtered = MagicMock()
         ordered = MagicMock()
         limited = MagicMock()
 
-        notifications.where.return_value = filtered
-        filtered.order_by.return_value = ordered
+        notifications.order_by.return_value = ordered
         ordered.limit.return_value = limited
         limited.stream.return_value = docs
 
         response = client.get("/api/notifications?unread_only=true&limit=500")
 
     assert response.status_code == 200
-    notifications.where.assert_called_once_with("read", "==", False)
+    body = response.get_json()
+    # Only the unread item should appear; limit is clamped to 100 server-side
+    # but there is only 1 unread item in the cache so count == 1.
+    assert body["count"] == 1
+    assert body["items"] == [{"id": "n1", "read": False}]
+    # The endpoint no longer applies .where("read", "==", False) at the Firestore
+    # level – it fetches all and filters in memory from the cache.
+    assert not notifications.where.called
+    # It always fetches 100 from Firestore on a cache miss.
     ordered.limit.assert_called_once_with(100)
-    assert response.get_json()["count"] == 1
 
 
 def test_notifications_unread_count_success(client):
@@ -415,3 +430,158 @@ def test_door_close_chart_success_counts_supported_events(client):
     assert len(body["values"]) == 24
     assert sum(body["values"]) == 3
     assert body["total"] == 3
+
+
+# ---------------------------------------------------------------------------
+# Cache-hit and cache-invalidation tests
+# ---------------------------------------------------------------------------
+
+def test_unread_count_served_from_cache(client):
+    """Second call to unread-count is served from cache (no Firestore query)."""
+    set_logged_in(client)
+
+    with patch("blueprints.notifications.routes.db") as mock_db:
+        notifications = (
+            mock_db.collection.return_value
+            .document.return_value
+            .collection.return_value
+        )
+        filtered = notifications.where.return_value
+        count_row = MagicMock()
+        count_row.value = 5
+        filtered.count.return_value.get.return_value = [[count_row]]
+
+        # First request: cache miss → Firestore query
+        r1 = client.get("/api/notifications/unread-count")
+        assert r1.status_code == 200
+        assert r1.get_json()["unread_count"] == 5
+        assert filtered.count.call_count == 1
+
+        # Second request: cache hit → no additional Firestore query
+        r2 = client.get("/api/notifications/unread-count")
+        assert r2.status_code == 200
+        assert r2.get_json()["unread_count"] == 5
+        assert filtered.count.call_count == 1  # still 1 – cache was used
+
+
+def test_notification_list_served_from_cache(client):
+    """Second call to the notification list is served from cache."""
+    set_logged_in(client)
+
+    with patch("blueprints.notifications.routes.db") as mock_db, \
+         patch(
+             "blueprints.notifications.routes._serialize_doc",
+             return_value={"id": "n1", "read": False},
+         ):
+        notifications = (
+            mock_db.collection.return_value
+            .document.return_value
+            .collection.return_value
+        )
+        limited = notifications.order_by.return_value.limit.return_value
+        limited.stream.return_value = [make_doc(doc_id="n1")]
+
+        r1 = client.get("/api/notifications")
+        assert r1.status_code == 200
+        assert limited.stream.call_count == 1
+
+        # Second request: cache hit
+        r2 = client.get("/api/notifications")
+        assert r2.status_code == 200
+        assert limited.stream.call_count == 1  # no additional Firestore call
+
+
+def test_mark_read_invalidates_cache(client):
+    """Marking a notification read clears the per-user notification cache."""
+    import utils.notification_cache as nc
+
+    set_logged_in(client)
+
+    # Pre-populate the cache with a known value.
+    nc.set_unread_count_cache("test_user_123", 3)
+    nc.set_notification_list_cache("test_user_123", [{"id": "n1", "read": False}])
+
+    with patch("blueprints.notifications.routes.db") as mock_db:
+        doc_ref = (
+            mock_db.collection.return_value
+            .document.return_value
+            .collection.return_value
+            .document.return_value
+        )
+        doc_ref.get.return_value = make_doc(doc_id="n1", exists=True)
+
+        response = client.post("/api/notifications/n1/read")
+
+    assert response.status_code == 200
+    # Cache must be cleared so the next poll hits Firestore.
+    assert nc.get_cached_unread_count("test_user_123") is None
+    assert nc.get_cached_notification_list("test_user_123") is None
+
+
+def test_mark_all_read_invalidates_cache(client):
+    """Marking all notifications read clears the per-user cache."""
+    import utils.notification_cache as nc
+
+    set_logged_in(client)
+
+    nc.set_unread_count_cache("test_user_123", 2)
+
+    with patch("blueprints.notifications.routes.db") as mock_db:
+        notifications = (
+            mock_db.collection.return_value
+            .document.return_value
+            .collection.return_value
+        )
+        filtered = notifications.where.return_value
+        filtered.stream.return_value = [make_doc(doc_id="a"), make_doc(doc_id="b")]
+        mock_db.batch.return_value = MagicMock()
+
+        response = client.post("/api/notifications/read-all")
+
+    assert response.status_code == 200
+    assert nc.get_cached_unread_count("test_user_123") is None
+
+
+def test_clear_notifications_invalidates_cache(client):
+    """Clearing notifications removes the user's cache entries."""
+    import utils.notification_cache as nc
+
+    set_logged_in(client)
+
+    nc.set_notification_list_cache("test_user_123", [{"id": "x"}, {"id": "y"}])
+
+    with patch("blueprints.notifications.routes.db") as mock_db:
+        notifications = (
+            mock_db.collection.return_value
+            .document.return_value
+            .collection.return_value
+        )
+        filtered = notifications.where.return_value
+        filtered.stream.return_value = [make_doc(doc_id="x"), make_doc(doc_id="y")]
+        mock_db.batch.return_value = MagicMock()
+
+        response = client.post("/api/notifications/clear", json={"mode": "read"})
+
+    assert response.status_code == 200
+    assert nc.get_cached_notification_list("test_user_123") is None
+
+
+def test_door_close_chart_served_from_cache(client):
+    """Second call to door-close-chart is served from cache (no Firestore query)."""
+    set_logged_in(client)
+
+    with patch(
+        "blueprints.notifications.routes.user_can_access_device",
+        return_value=True,
+    ), patch("blueprints.notifications.routes.db") as mock_db:
+        query = mock_db.collection.return_value.where.return_value.where.return_value
+        query.stream.return_value = []
+
+        r1 = client.get("/api/device/device-001/door-close-chart?hours=24")
+        assert r1.status_code == 200
+        assert query.stream.call_count == 1
+
+        # Second request within TTL: served from cache
+        r2 = client.get("/api/device/device-001/door-close-chart?hours=24")
+        assert r2.status_code == 200
+        assert query.stream.call_count == 1  # no additional Firestore call
