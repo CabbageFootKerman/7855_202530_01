@@ -60,6 +60,20 @@ src/
 ## 🚀 Start Here: App Location
 
 👉 **[Go to the app source folder (src/)](src/)** — The main application entry point is in [src/app.py](src/app.py).
+
+### Redis Setup (Required for Rate Limiting)
+
+This app uses Redis for rate limiting. You must have a Redis server running:
+
+- **On Raspberry Pi:**
+        - Install Docker: `sudo apt install docker.io`
+        - Start Redis: `docker run --name redis-limiter -p 6379:6379 -d redis`
+- **On Windows:**
+        - Install Docker Desktop, then run: `docker run --name redis-limiter -p 6379:6379 -d redis`
+
+Redis must be running in the background while the Flask app is active.
+
+### Run the app
 - Note: you will likely have to setup a venv/ if running on the pi:
     - `cd Documents/20......./src`
     - `python3 -m venv venv`
@@ -70,7 +84,8 @@ src/
     - `cd Documents/20......./src`
     - `source venv/bin/activate`
     - `python app.py`
-- To run on windows, run as any other python app
+- To run on windows
+    - `.venv\Scripts\Activate` ... etc.
 
 ## Architectural Choices
 
