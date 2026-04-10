@@ -7,6 +7,7 @@ print("--- SmartPost Startup Check ---")
 print(f"  FLASK_SECRET_KEY set?       {bool(FLASK_SECRET_KEY)}")
 print(f"  FIREBASE_WEB_API_KEY set?   {bool(FIREBASE_WEB_API_KEY)}")
 #print(f"  SENSOR_API_KEY set?         {bool(SENSOR_API_KEY)}")
+print(f"  Note for developers: if confused about Redis (a recent addition), ask Mik.")
 print("-------------------------------")
 
 # Blueprint imports
