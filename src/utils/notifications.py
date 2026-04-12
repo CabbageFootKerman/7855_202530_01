@@ -6,6 +6,7 @@ from firebase_admin import firestore
 from config import NOTIFICATION_SCHEMA_VERSION
 from firebase import db
 from utils.firestore import _utc_now_iso
+from utils.notification_cache import invalidate_notification_cache
 
 
 # ---------------------------
@@ -84,6 +85,9 @@ class FirestoreUserInboxChannel(NotificationChannel):
             }, merge=True)
 
             writes += 1
+            # Invalidate the in-memory cache so the next poll reflects this new
+            # notification without waiting for the TTL to expire.
+            invalidate_notification_cache(username)
 
         return {"channel": self.name, "status": "ok", "writes": writes}
 

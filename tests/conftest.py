@@ -164,3 +164,23 @@ def disable_all_rate_limits():
     extensions.limiter.enabled = False
     yield
     extensions.limiter.enabled = True
+
+
+@pytest.fixture(autouse=True)
+def clear_in_memory_caches():
+    """Reset all in-process caches before every test so tests are isolated."""
+    import utils.notification_cache as nc
+    import utils.device_access as da
+
+    with nc._notif_list_lock:
+        nc._notif_list_cache.clear()
+    with nc._notif_count_lock:
+        nc._notif_count_cache.clear()
+    with nc._chart_lock:
+        nc._chart_cache.clear()
+    with da._device_cache_lock:
+        da._device_cache.clear()
+    with da._user_devices_lock:
+        da._user_devices_cache.clear()
+
+    yield

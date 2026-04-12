@@ -3,7 +3,7 @@
 **Course:** Software Systems  
 **Status:** In Development
 
-**Team Members:**
+## Team Members:
 1. Pawel Banasik: I don't like defining myself, don't make me do it. I like puzzles and coding, and coming up with innovative solutions to problems, that's about all that I will say.
 2. Mikhail Rego: I am a curious, apprentice engineer who has a natural talent for organizing things and telling people "they're not doing doing what they're supposed to :yum:." Fun fact: I am crazy into both hard-core rock and hard-core country.
 3. Glen Healy: I'm interested in building some cool electrical and software projects this semester. this is a second test.
@@ -60,6 +60,20 @@ src/
 ## 🚀 Start Here: App Location
 
 👉 **[Go to the app source folder (src/)](src/)** — The main application entry point is in [src/app.py](src/app.py).
+
+### Redis Setup (Required for Rate Limiting)
+
+This app uses Redis for rate limiting. You must have a Redis server running:
+
+- **On Raspberry Pi:**
+        - Install Docker: `sudo apt install docker.io`
+        - Start Redis: `docker run --name redis-limiter -p 6379:6379 -d redis`
+- **On Windows:**
+        - Install Docker Desktop, then run: `docker run --name redis-limiter -p 6379:6379 -d redis`
+
+Redis must be running in the background while the Flask app is active.
+
+### Run the app
 - Note: you will likely have to setup a venv/ if running on the pi:
     - `cd Documents/20......./src`
     - `python3 -m venv venv`
@@ -70,7 +84,8 @@ src/
     - `cd Documents/20......./src`
     - `source venv/bin/activate`
     - `python app.py`
-- To run on windows, run as any other python app
+- To run on windows
+    - `.venv\Scripts\Activate` ... etc.
 
 ## Architectural Choices
 

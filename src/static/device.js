@@ -23,7 +23,7 @@
   const btnOpen = document.getElementById("btnOpen");
   const btnClose = document.getElementById("btnClose");
 
-  const POLL_MS = 1000;
+  const POLL_MS = 5000;
   let authRedirecting = false;
   let pollingStopped = false;
 

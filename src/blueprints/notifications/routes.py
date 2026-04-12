@@ -8,6 +8,12 @@ from utils.firestore import _serialize_doc
 from utils.notifications import publish_device_notification
 from decorators.auth import api_login_required
 from utils.device_access import user_can_access_device
+from utils.notification_cache import (
+    get_cached_notification_list, set_notification_list_cache,
+    get_cached_unread_count, set_unread_count_cache,
+    invalidate_notification_cache,
+    get_cached_chart, set_chart_cache,
+)
 
 notifications_bp = Blueprint("notifications", __name__)
 
@@ -24,19 +30,34 @@ def api_notifications_list(username):
     limit = max(1, min(limit, 100))
     unread_only = request.args.get("unread_only", "false").lower() in ("1", "true", "yes")
 
+    # Serve from cache when available.  The cache always holds up to 100 items
+    # so both paginated and filtered variants can be satisfied without Firestore.
+    cached_items = get_cached_notification_list(username)
+    if cached_items is not None:
+        if unread_only:
+            items = [n for n in cached_items if not n.get("read")][:limit]
+        else:
+            items = cached_items[:limit]
+        return jsonify({"username": username, "count": len(items), "items": items}), 200
+
+    # Cache miss: fetch the maximum allowed number of items from Firestore so
+    # the cached list covers all realistic pagination/filter needs.
     q = (
         db.collection("users")
         .document(username)
         .collection("notifications")
+        .order_by("created_at", direction=firestore.Query.DESCENDING)
+        .limit(100)
     )
 
+    all_items = [_serialize_doc(doc) for doc in q.stream()]
+
+    set_notification_list_cache(username, all_items)
+
     if unread_only:
-        q = q.where("read", "==", False)
-
-    q = q.order_by("created_at", direction=firestore.Query.DESCENDING).limit(limit)
-
-    docs = list(q.stream())
-    items = [_serialize_doc(doc) for doc in docs]
+        items = [n for n in all_items if not n.get("read")][:limit]
+    else:
+        items = all_items[:limit]
 
     return jsonify({
         "username": username,
@@ -48,6 +69,10 @@ def api_notifications_list(username):
 @notifications_bp.route("/api/notifications/unread-count", methods=["GET"])
 @api_login_required
 def api_notifications_unread_count(username):
+    cached = get_cached_unread_count(username)
+    if cached is not None:
+        return jsonify({"username": username, "unread_count": cached}), 200
+
     q = (
         db.collection("users")
         .document(username)
@@ -55,7 +80,11 @@ def api_notifications_unread_count(username):
         .where("read", "==", False)
     )
 
-    count = sum(1 for _ in q.stream())
+    # Use server-side count aggregation to avoid streaming every document.
+    result = q.count().get()
+    count = result[0][0].value
+
+    set_unread_count_cache(username, count)
 
     return jsonify({
         "username": username,
@@ -81,6 +110,8 @@ def api_notifications_mark_read(username, notification_id):
         "read_at": firestore.SERVER_TIMESTAMP,
         "updated_at": firestore.SERVER_TIMESTAMP,
     })
+
+    invalidate_notification_cache(username)
 
     return jsonify({
         "message": "Marked as read",
@@ -108,6 +139,8 @@ def api_notifications_mark_all_read(username):
         })
     if docs:
         batch.commit()
+
+    invalidate_notification_cache(username)
 
     return jsonify({
         "message": "Marked all as read",
@@ -152,6 +185,8 @@ def api_notifications_clear(username):
             batch.delete(doc.reference)
         batch.commit()
         total_deleted += len(chunk)
+
+    invalidate_notification_cache(username)
 
     return jsonify({
         "message": "Notifications cleared",
@@ -243,6 +278,12 @@ def api_device_door_close_chart(username, device_id):
 
     hours = max(1, min(hours, 168))
 
+    # Serve from cache – chart data changes at most once per hour so a 5-minute
+    # TTL is negligible staleness compared to the 60-second browser refresh.
+    cached = get_cached_chart(device_id, hours)
+    if cached is not None:
+        return jsonify(cached), 200
+
     now = datetime.now(timezone.utc).replace(minute=0, second=0, microsecond=0)
     start = now - timedelta(hours=hours - 1)
 
@@ -253,7 +294,11 @@ def api_device_door_close_chart(username, device_id):
         buckets[label] = 0
         current += timedelta(hours=1)
 
-    q = db.collection("notification_events").where("device_id", "==", device_id)
+    q = (
+        db.collection("notification_events")
+        .where("device_id", "==", device_id)
+        .where("logged_at", ">=", start)
+    )
     docs = list(q.stream())
 
     for doc in docs:
@@ -284,9 +329,11 @@ def api_device_door_close_chart(username, device_id):
         if label in buckets:
             buckets[label] += 1
 
-    return jsonify({
+    result = {
         "device_id": device_id,
         "labels": list(buckets.keys()),
         "values": list(buckets.values()),
         "total": sum(buckets.values()),
-    }), 200
+    }
+    set_chart_cache(device_id, hours, result)
+    return jsonify(result), 200
