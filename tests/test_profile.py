@@ -219,3 +219,99 @@ def test_delete_profile_not_found_returns_404(client):
     assert response.status_code == 404
     assert response.get_json() == {"error": "Not found"}
     mock_doc_ref.delete.assert_not_called()
+
+def test_create_profile_wrong_content_type_returns_415(client):
+    with patch("blueprints.profile.routes.db") as mock_db:
+        response = client.post(
+            "/api/profile",
+            data="username=alice",
+            headers={"Content-Type": "text/plain"},
+        )
+
+    assert response.status_code == 415
+    mock_db.collection.assert_not_called()
+
+
+def test_create_profile_null_json_returns_415(client):
+    with patch("blueprints.profile.routes.db") as mock_db:
+        response = client.post("/api/profile", json=None)
+
+    assert response.status_code == 415
+    mock_db.collection.assert_not_called()
+
+
+def test_update_profile_single_field_success(client):
+    payload = {"first_name": "OnlyUpdated"}
+
+    with patch("blueprints.profile.routes.db") as mock_db:
+        mock_collection = MagicMock()
+        mock_doc_ref = MagicMock()
+        mock_snapshot = make_snapshot(exists=True)
+
+        mock_db.collection.return_value = mock_collection
+        mock_collection.document.return_value = mock_doc_ref
+        mock_doc_ref.get.return_value = mock_snapshot
+
+        response = client.put("/api/profile/alice", json=payload)
+
+    assert response.status_code == 200
+    assert response.get_json() == {
+        "message": "Updated",
+        "username": "alice",
+    }
+    mock_doc_ref.update.assert_called_once_with(payload)
+
+
+def test_update_profile_null_json_returns_415(client):
+    with patch("blueprints.profile.routes.db") as mock_db:
+        mock_collection = MagicMock()
+        mock_doc_ref = MagicMock()
+        mock_snapshot = make_snapshot(exists=True)
+
+        mock_db.collection.return_value = mock_collection
+        mock_collection.document.return_value = mock_doc_ref
+        mock_doc_ref.get.return_value = mock_snapshot
+
+        response = client.put("/api/profile/alice", json=None)
+
+    assert response.status_code == 415
+    mock_doc_ref.update.assert_not_called()
+
+
+def test_update_profile_wrong_content_type_does_not_touch_firestore(client):
+    with patch("blueprints.profile.routes.db") as mock_db:
+        response = client.put(
+            "/api/profile/alice",
+            data="first_name=Alice",
+            headers={"Content-Type": "text/plain"},
+        )
+
+    assert response.status_code == 415
+    assert response.get_json() == {
+        "error": "Content-Type must be application/json."
+    }
+    mock_db.collection.assert_not_called()
+
+
+def test_get_profile_snapshot_to_dict_called_once(client):
+    with patch("blueprints.profile.routes.db") as mock_db:
+        mock_collection = MagicMock()
+        mock_doc_ref = MagicMock()
+        mock_snapshot = make_snapshot(
+            exists=True,
+            doc_id="alice",
+            data={
+                "first_name": "Alice",
+                "last_name": "Smith",
+                "student_id": "12345678",
+            },
+        )
+
+        mock_db.collection.return_value = mock_collection
+        mock_collection.document.return_value = mock_doc_ref
+        mock_doc_ref.get.return_value = mock_snapshot
+
+        response = client.get("/api/profile/alice")
+
+    assert response.status_code == 200
+    mock_snapshot.to_dict.assert_called_once()

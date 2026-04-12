@@ -1,5 +1,7 @@
 from datetime import datetime, timedelta, timezone
 from unittest.mock import MagicMock, patch
+import utils.notification_cache as nc
+import pytest
 
 
 def set_logged_in(client, username="test_user_123"):
@@ -15,6 +17,22 @@ def make_doc(*, doc_id="doc-1", data=None, exists=True):
     doc.reference = MagicMock(name=f"ref_{doc_id}")
     doc.to_dict.return_value = data or {}
     return doc
+
+
+def _clear_notification_caches():
+    with nc._notif_list_lock:
+        nc._notif_list_cache.clear()
+    with nc._notif_count_lock:
+        nc._notif_count_cache.clear()
+    with nc._chart_lock:
+        nc._chart_cache.clear()
+
+
+@pytest.fixture(autouse=True)
+def clear_notification_caches():
+    _clear_notification_caches()
+    yield
+    _clear_notification_caches()
 
 
 def test_notifications_list_success(client):
@@ -204,6 +222,11 @@ def test_notifications_mark_all_read_success(client):
     }
     assert batch.update.call_count == 2
     batch.commit.assert_called_once()
+
+    first_payload = batch.update.call_args_list[0][0][1]
+    assert first_payload["read"] is True
+    assert "read_at" in first_payload
+    assert "updated_at" in first_payload
 
 
 def test_notifications_mark_all_read_with_no_unread(client):
@@ -585,3 +608,80 @@ def test_door_close_chart_served_from_cache(client):
         r2 = client.get("/api/device/device-001/door-close-chart?hours=24")
         assert r2.status_code == 200
         assert query.stream.call_count == 1  # no additional Firestore call
+
+
+def test_notifications_list_requires_login(client):
+    response = client.get("/api/notifications")
+    assert response.status_code == 401
+    assert response.get_json() == {"error": "Not logged in."}
+
+
+def test_notifications_unread_count_requires_login(client):
+    response = client.get("/api/notifications/unread-count")
+    assert response.status_code == 401
+    assert response.get_json() == {"error": "Not logged in."}
+
+
+def test_notifications_mark_read_requires_login(client):
+    response = client.post("/api/notifications/notif-123/read")
+    assert response.status_code == 401
+    assert response.get_json() == {"error": "Not logged in."}
+
+
+def test_notifications_mark_all_read_requires_login(client):
+    response = client.post("/api/notifications/read-all")
+    assert response.status_code == 401
+    assert response.get_json() == {"error": "Not logged in."}
+
+def test_notifications_list_empty_returns_zero_items(client):
+    set_logged_in(client)
+
+    with patch("blueprints.notifications.routes.db") as mock_db, \
+         patch("blueprints.notifications.routes._serialize_doc") as mock_serialize:
+        notifications = (
+            mock_db.collection.return_value
+            .document.return_value
+            .collection.return_value
+        )
+        ordered = MagicMock()
+        limited = MagicMock()
+
+        notifications.order_by.return_value = ordered
+        ordered.limit.return_value = limited
+        limited.stream.return_value = []
+
+        response = client.get("/api/notifications")
+
+    assert response.status_code == 200
+    assert response.get_json() == {
+        "username": "test_user_123",
+        "count": 0,
+        "items": [],
+    }
+    mock_serialize.assert_not_called()
+
+
+def test_notifications_unread_count_zero(client):
+    set_logged_in(client)
+
+    with patch("blueprints.notifications.routes.db") as mock_db:
+        notifications = (
+            mock_db.collection.return_value
+            .document.return_value
+            .collection.return_value
+        )
+        filtered = notifications.where.return_value
+
+        count_row = MagicMock()
+        count_row.value = 0
+        filtered.count.return_value.get.return_value = [[count_row]]
+
+        response = client.get("/api/notifications/unread-count")
+
+    assert response.status_code == 200
+    assert response.get_json() == {
+        "username": "test_user_123",
+        "unread_count": 0,
+    }
+
+    
