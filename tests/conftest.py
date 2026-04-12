@@ -101,14 +101,20 @@ def app_module(force_test_env, monkeypatch, mock_firestore, mock_redis):
         SECRET_KEY="test-secret-key",
         RATELIMIT_STORAGE_URI="memory://",
         CACHE_TYPE="SimpleCache",
+        SENSOR_API_KEY="test-sensor-key",
+        SMARTPOST_PI_API_KEY="test-sensor-key",
     )
+
+    import utils.auth as auth_utils
+    monkeypatch.setattr(auth_utils, "SENSOR_API_KEY", "test-sensor-key", raising=False)
+    monkeypatch.setattr(auth_utils, "SMARTPOST_PI_API_KEY", "test-sensor-key", raising=False)
 
     yield app_module
     _clear_project_modules()
 
 
 @pytest.fixture
-def client(app_module, monkeypatch):
+def client(app_module):
     """
     Fresh client per test, but no app reimport per test.
     Keeps cookies/session isolated while staying fast.
