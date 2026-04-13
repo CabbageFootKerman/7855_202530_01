@@ -6,7 +6,7 @@ from dotenv import load_dotenv
 BASE_DIR = Path(__file__).resolve().parents[1]
 
 # Load .env from src/ directory before reading any env vars
-load_dotenv(BASE_DIR / "src" / ".env", override=True)
+load_dotenv(BASE_DIR / ".env", override=True)
 
 # Redis (for Flask-Limiter)
 RATELIMIT_STORAGE_URL = os.getenv("RATELIMIT_STORAGE_URL", "redis://localhost:6379")
