@@ -82,7 +82,7 @@ def invalidate_notification_cache(username: str) -> None:
 # refreshes every 60 seconds.
 # ---------------------------------------------------------------------------
 
-_CHART_TTL = 300  # 5 minutes
+_CHART_TTL = 50  # 50 seconds
 
 _chart_cache: dict = {}  # (device_id, hours) -> (data: dict, expiry: float)
 _chart_lock = Lock()
