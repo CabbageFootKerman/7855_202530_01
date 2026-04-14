@@ -5,6 +5,8 @@ services:
       - "5000:5000"
     env_file:
       - src/.env
+    environment:
+      - RATELIMIT_STORAGE_URI=redis://redis:6379/0
     volumes:
       - ./serviceAccountKey.json:/app/serviceAccountKey.json:ro
       - ./src/uploads:/app/src/uploads
@@ -13,5 +15,3 @@ services:
 
   redis:
     image: redis:7-alpine
-    ports:
-      - "6379:6379"

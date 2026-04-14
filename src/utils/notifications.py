@@ -200,50 +200,42 @@ def resolve_notification_recipients_for_device(
     device_id: Optional[str],
     actor_username: Optional[str],
 ) -> List[str]:
-    """
-    DEMO/TEMP recipient resolver.
-
-    Current behavior:
-    - sends notifications to the current logged-in user only.
-
-    Future teammates can replace this with:
-    - device owner lookup
-    - shared users
-    - team roles
-    - user preferences / muting
-    """
     recipients = []
+
     if actor_username:
         recipients.append(actor_username)
 
-    # Deduplicate while preserving order
+    if device_id:
+        try:
+            device_doc = db.collection("devices").document(device_id).get()
+            if device_doc.exists:
+                device_data = device_doc.to_dict() or {}
+
+                owner_username = device_data.get("owner_username")
+                if owner_username:
+                    recipients.append(owner_username)
+
+                allowed_users = device_data.get("allowed_users") or []
+                for username in allowed_users:
+                    if username:
+                        recipients.append(username)
+        except Exception:
+            # keep notification flow from crashing if lookup fails
+            pass
+
     deduped = []
     seen = set()
     for r in recipients:
         if r not in seen:
             seen.add(r)
             deduped.append(r)
+
     return deduped
-
-
-# ---------------------------
-# Module-level singleton
-# ---------------------------
-
-notification_service = NotificationService(
-    db_client=db,
-    channels=[
-        FirestoreEventLogChannel(db),
-        FirestoreUserInboxChannel(db),
-        StubWebPushChannel(),    # placeholder
-        StubMobilePushChannel(), # placeholder
-    ],
-)
 
 
 def publish_device_notification(
     *,
-    actor_username: str,
+    actor_username: Optional[str] = None,
     device_id: str,
     notif_type: str,
     title: str,
@@ -265,3 +257,20 @@ def publish_device_notification(
         device_id=device_id,
         data=data,
     )
+
+# ---------------------------
+# Module-level singleton
+# ---------------------------
+
+notification_service = NotificationService(
+    db_client=db,
+    channels=[
+        FirestoreEventLogChannel(db),
+        FirestoreUserInboxChannel(db),
+        StubWebPushChannel(),    # placeholder
+        StubMobilePushChannel(), # placeholder
+    ],
+)
+
+
+

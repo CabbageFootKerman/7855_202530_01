@@ -87,6 +87,12 @@ def api_device_state(username, device_id):
     }), 200
 
 
+def _norm_state(value):
+    if value is None:
+        return ""
+    return str(value).strip().lower()
+
+
 @device_bp.route("/api/device/<device_id>/telemetry", methods=["POST"])
 def api_device_telemetry(device_id):
     auth_error = require_device_api_key(device_id)
@@ -109,6 +115,9 @@ def api_device_telemetry(device_id):
     actuator_state = data.get("actuator_state", "unknown")
 
     with DEVICE_LOCK:
+        prev_state = DEVICE_STATE.get(device_id, {})
+        prev_door_state = prev_state.get("door_state", "unknown")
+
         DEVICE_STATE[device_id] = {
             "device_id": device_id,
             "door_state": door_state,
@@ -119,9 +128,33 @@ def api_device_telemetry(device_id):
             "last_update_iso": utc_now_iso(),
         }
 
+    just_closed = (
+        _norm_state(prev_door_state) != "closed"
+        and _norm_state(door_state) == "closed"
+    )
+
+    if just_closed:
+        try:
+            publish_device_notification(
+                actor_username=None,
+                device_id=device_id,
+                notif_type="door_closed",
+                title="Door closed",
+                body=f"Device {device_id} finished closing.",
+                severity="success",
+                data={
+                    "source": "device_telemetry",
+                    "event": "door_closed",
+                    "previous_door_state": prev_door_state,
+                    "door_state": door_state,
+                    "actuator_state": actuator_state,
+                },
+            )
+        except Exception as e:
+            current_app.logger.exception("Door closed notification publish failed: %s", e)
+
     print(f"Telemetry received from {device_id}: {data}", flush=True)
     return jsonify({"message": "Telemetry received."}), 200
-
 
 @device_bp.route("/api/device/<device_id>/command", methods=["POST"])
 @api_login_required
