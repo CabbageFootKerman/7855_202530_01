@@ -1,11 +1,15 @@
+import sys
+from pathlib import Path
 import secrets
+
+sys.path.append(str(Path(__file__).resolve().parent.parent))
+
 from firebase import db
 from firebase_admin import firestore
-
 # --- Interactive device provisioning ---
 
-device_id = input("Device ID [smartpost-pi-1000]: ").strip() or "smartpost-pi-1000"
-display_name = input("Display name [smartpost-pi-1000]: ").strip() or "smartpost-pi-1000"
+device_id = input("Device ID [smartpost-pi-2000]: ").strip() or "smartpost-pi-2000"
+display_name = input("Display name [smartpost-pi-2000]: ").strip() or "smartpost-pi-2000"
 
 generated_code = secrets.token_hex(4).upper()  # e.g. "A3F1B90C"
 claim_code = input(f"Claim code [{generated_code}]: ").strip() or generated_code

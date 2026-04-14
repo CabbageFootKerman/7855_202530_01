@@ -1,6 +1,7 @@
 import requests as http_requests
 from flask import Blueprint, render_template, request, redirect, url_for, session, jsonify
 from firebase_admin import auth as firebase_auth
+from firebase_admin import firestore
 import re
 
 from config import FIREBASE_WEB_API_KEY
@@ -19,7 +20,7 @@ FIREBASE_SIGN_UP_URL = (
     f"?key={FIREBASE_WEB_API_KEY}"
 )
 
-# Friendly error mapping 
+# Friendly error mapping
 _ERROR_MAP = {
     "INVALID_LOGIN_CREDENTIALS": "Invalid email or password",
     "EMAIL_NOT_FOUND": "Invalid email or password",
@@ -52,19 +53,36 @@ def _extract_id_token_from_request(data: dict) -> str:
 
 
 def _start_user_session_from_id_token(id_token: str) -> dict:
+    print("About to verify Firebase idToken...")
     decoded = firebase_auth.verify_id_token(id_token)
+    print("Firebase idToken verified.")
 
     uid = decoded.get("uid") or decoded.get("user_id") or decoded.get("sub")
     if not uid:
         raise ValueError("Verified token did not contain a user id")
 
+    print(f"Starting Flask session for uid={uid}")
     session.clear()
     session["logged_in"] = True
     session["username"] = uid
     session["email"] = decoded.get("email")
     session["id_token"] = id_token
+    print("Flask session stored successfully.")
 
     return decoded
+
+
+def _ensure_profile_document(uid: str, email: str | None):
+    profile_data = {
+        "username": uid,
+        "email": email or "",
+        "role": "user",
+        "created_at": firestore.SERVER_TIMESTAMP,
+        "updated_at": firestore.SERVER_TIMESTAMP,
+    }
+    db.collection("profiles").document(uid).set(profile_data, merge=True)
+    print(f"Profile ensured in Firestore for uid={uid}")
+
 
 def _validate_signup_input(email: str, password: str, confirm_password: str) -> str | None:
     if not email:
@@ -77,7 +95,6 @@ def _validate_signup_input(email: str, password: str, confirm_password: str) -> 
     if not password:
         return "Password is required"
 
-    # Firebase password minimum is 6
     if len(password) < 6:
         return "Password must be at least 6 characters"
 
@@ -86,9 +103,6 @@ def _validate_signup_input(email: str, password: str, confirm_password: str) -> 
 
     return None
 
-# --------------------------------------------------
-# Web form routes
-# --------------------------------------------------
 
 @auth_bp.route("/login", methods=["GET", "POST"])
 @limiter.limit("10 per minute")
@@ -96,7 +110,6 @@ def login():
     if request.method == "GET":
         return render_template("login.html", error=None)
 
-    # JSON callers get the API path
     if request.is_json:
         return api_login()
 
@@ -107,11 +120,15 @@ def login():
         return render_template("login.html", error="Email and password are required.")
 
     try:
-        resp = http_requests.post(FIREBASE_SIGN_IN_URL, json={
-            "email": email,
-            "password": password,
-            "returnSecureToken": True,
-        }, timeout=10)
+        resp = http_requests.post(
+            FIREBASE_SIGN_IN_URL,
+            json={
+                "email": email,
+                "password": password,
+                "returnSecureToken": True,
+            },
+            timeout=10,
+        )
     except http_requests.RequestException:
         return render_template("login.html", error="Authentication service unavailable.")
 
@@ -120,14 +137,14 @@ def login():
         return render_template("login.html", error=_friendly_error(raw, "Invalid credentials."))
 
     data = resp.json()
-    
+
     try:
         _start_user_session_from_id_token(data["idToken"])
-    except Exception:
-        return render_template("login.html", error="Authentication failed.")
+    except Exception as e:
+        print("LOGIN AUTH ERROR:", repr(e))
+        return render_template("login.html", error=f"Authentication failed: {e}")
 
     return redirect(url_for("dashboard.home"))
-
 
 
 @auth_bp.route("/signup", methods=["GET", "POST"])
@@ -167,9 +184,12 @@ def signup():
     data = resp.json()
 
     try:
-        _start_user_session_from_id_token(data["idToken"])
-    except Exception:
-        return render_template("signup.html", error="Authentication failed.")
+        decoded = _start_user_session_from_id_token(data["idToken"])
+        uid = session["username"]
+        _ensure_profile_document(uid, decoded.get("email"))
+    except Exception as e:
+        print("SIGNUP AUTH ERROR:", repr(e))
+        return render_template("signup.html", error=f"Authentication failed: {e}")
 
     return redirect(url_for("dashboard.home"))
 
@@ -180,16 +200,10 @@ def logout():
     return redirect(url_for("auth.login"))
 
 
-# --------------------------------------------------
-# JSON API endpoints (for SmartPost / programmatic callers)
-# --------------------------------------------------
-
 def api_login():
     data = request.get_json(silent=True) or {}
     id_token = _extract_id_token_from_request(data)
 
-    # Backward-compatible path: accept email/password, sign in with Firebase,
-    # then verify the returned ID token before treating the user as logged in.
     if not id_token:
         email = (data.get("email") or "").strip()
         password = data.get("password") or ""
@@ -218,8 +232,9 @@ def api_login():
 
     try:
         decoded = _start_user_session_from_id_token(id_token)
-    except Exception:
-        return jsonify({"error": "Unauthorized"}), 401
+    except Exception as e:
+        print("API LOGIN AUTH ERROR:", repr(e))
+        return jsonify({"error": f"Unauthorized: {e}"}), 401
 
     return jsonify({
         "message": "Login successful",
@@ -227,6 +242,7 @@ def api_login():
         "email": decoded.get("email"),
         "token": id_token,
     }), 200
+
 
 def api_signup():
     data = request.get_json(silent=True) or {}
@@ -260,8 +276,11 @@ def api_signup():
 
     try:
         decoded = _start_user_session_from_id_token(firebase_data["idToken"])
-    except Exception:
-        return jsonify({"error": "Authentication failed"}), 400
+        uid = session["username"]
+        _ensure_profile_document(uid, decoded.get("email"))
+    except Exception as e:
+        print("API SIGNUP AUTH ERROR:", repr(e))
+        return jsonify({"error": f"Authentication failed: {e}"}), 400
 
     return jsonify({
         "message": "Signup successful",

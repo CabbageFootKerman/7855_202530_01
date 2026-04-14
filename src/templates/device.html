@@ -508,7 +508,7 @@
 
     document.addEventListener("DOMContentLoaded", function () {
         loadDoorCloseChart();
-        setInterval(loadDoorCloseChart, 5000);
+        setInterval(loadDoorCloseChart, 60000);
     });
 })();
     </script>
@@ -518,7 +518,7 @@
   const DEVICE_ID = "{{ device_id }}";
 
   // Polling interval (ms)
-  const NOTIF_POLL_MS = 10000;
+  const NOTIF_POLL_MS = 30000;
 
   // UI elements
   const bellBtn = document.getElementById("notifBellBtn");
